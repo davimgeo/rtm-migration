@@ -1,15 +1,21 @@
 from __future__ import annotations
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import animation
+from scipy.ndimage import gaussian_filter
+from matplotlib import animation
 from numba import njit, prange
 
+OUTPUT_PATH = "data/output/"
+
 class Acoustic:
-  def __init__(self, model: Model, geom: Geometry, seis: Seismogram, c):
+  def __init__(self, model: Model, geom: Geometry, seis: Seismogram, mig: Migration, c):
     self.mdl = model
     self.geom = geom
     self.seis = seis
+    self.mig = mig
     self.c = c
 
     self.damp2D = np.ones((self.mdl.nzz, self.mdl.nxx))
@@ -27,6 +33,8 @@ class Acoustic:
 
     self.transit_time = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.ref = np.zeros((self.mdl.nzz, self.mdl.nxx))
+
+    self.snap_id = 0
 
   def get_ricker(self):
     fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
@@ -90,9 +98,17 @@ class Acoustic:
           rz = int(self.geom.recz[irec]) + self.mdl.nb
           self.seismogram[t, irec] = self.upre[rz, rx]
 
+        #self.seis.plot(self.seismogram)
+
         if self.c.snap_bool:
           if not t % snap_ratio:
             self.snapshots.append(self.upre.copy())
+
+            if self.c.save_snapshots:
+              self.mig.save_src_domain()
+              self.mig.save_rec_domain(current_time)
+
+              self.snap_id += 1
   
     if self.c.save_seismogram:
       (
@@ -100,7 +116,7 @@ class Acoustic:
         .flatten('F')
         .astype("float32", order='F')
         .tofile(
-          self.c.seismogram_output_path +
+          OUTPUT_PATH + 
           f"seismogram_nt{self.c.nt}_dt{self.c.dt}_nrec{self.geom.nrec}.bin"
         )
       )
@@ -187,6 +203,54 @@ class Acoustic:
 
       plt.show()
 
+class Migration(Acoustic):
+  def __init__(self):
+    super().__init__()
+
+  def save_src_domain(self):
+    (
+      self.upre
+      .flatten('F')
+      .astype("float32", order='F')
+      .tofile(
+        OUTPUT_PATH + "\\src_domain\\" + 
+        f"snapshot_{self.mdl.nxx}x{self.mdl.nzz}_{self.snap_id}.bin"
+      )
+    )
+
+  def save_rec_domain(self, current_time):
+    seismogram = self.seis.seismogram
+    seismogram = seismogram[::-1, :]
+
+    (
+      seismogram
+      .flatten('F')
+      .astype("float32", order='F')
+      .tofile(
+        OUTPUT_PATH + "\\rec_domain\\" + 
+        f"seismogram_nt{current_time}_dt{self.c.dt}_nrec{self.geom.nrec}_{self.snap_id}.bin"
+      )
+    )
+
+  def plot_transit_time(self):
+    img = plt.imshow(
+        self.transit_time[
+            self.c.nb:self.c.nb + self.c.nz,
+            self.c.nb:self.c.nb + self.c.nx
+        ],
+        cmap="seismic",
+        aspect="auto"
+    )
+
+    plt.xlabel("Distance [m]", fontsize=13)
+    plt.ylabel("Depth [m]", fontsize=13)
+    plt.title("Transit Time", fontsize=16)
+
+    cbar = plt.colorbar(img)
+    cbar.set_label("Time [s]")
+
+    plt.show()
+
 class Seismogram:
   def __init__(self, geom, c):
     self.geom = geom
@@ -198,9 +262,11 @@ class Seismogram:
 
     self.direct_wave = np.array([])
 
-  def load(self):
+  def load(self, input_path):
+    path = input_path or self.c.seismogram_input_path
+
     self.seismogram_load = np.fromfile(
-        self.c.seismogram_input_path, dtype=np.float32, count=self.c.nt*self.geom.nrec
+        path, dtype=np.float32, count=self.c.nt*self.geom.nrec
         ).reshape([self.c.nt, self.geom.nrec], order='F')
 
   def remove_direct_wave(self, epsilon=0.70e-1):
@@ -245,7 +311,10 @@ class Seismogram:
     x_plot = np.arange(self.geom.nrec)
     y_plot = self.direct_wave / self.c.dt
 
-    ax.plot(x_plot, y_plot, 'r--')
+    try:
+      ax.plot(x_plot, y_plot, 'r--')
+    except:
+      pass
     ############################
 
     ax.set_yticks(tloc)
@@ -273,7 +342,7 @@ class Model:
     self.interfaces = c.interfaces
     self.value_interfaces = c.velocity_interfaces
 
-  def get_model(self) -> None:
+  def get(self) -> None:
     if not len(self.interfaces):
       self.model[:, :] = self.value_interfaces[0]
     else:
@@ -299,6 +368,10 @@ class Model:
         model_ext[i, self.nx+self.nb+j] = model_ext[i, self.nx+self.nb-1]
 
     self.model = model_ext
+
+  def smooth(self):
+    # TODO: comparar 3 valores de sigma e comparar transit time
+    self.model = gaussian_filter(self.model, sigma=2)
 
 class Geometry:
   def __init__(self, c) -> None:
@@ -373,3 +446,12 @@ def update_tt(
           ref[i,j] = upre[i,j]
           transit_time[i,j] = current_time
 
+def measure_runtime(func):
+  def wrapper(*args, **kwargs):
+    start = time.time()
+    result = func(*args, **kwargs)
+    end = time.time()
+    print(f"Runtime: {round(end - start, 4)} seconds")
+    return result
+
+  return wrapper

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 class Parameters:
   debug = False
 
+  save_snapshots = 0
+
   receivers = ""
   sources = ""
   offset = 0.0
@@ -28,7 +30,6 @@ class Parameters:
   perc = 99
 
   seismogram_input_path = ""
-  seismogram_output_path = ""
   nt   = 0
   dt   = 0.0
 

@@ -2,6 +2,10 @@
 
 debug = true
 
+# Migration
+
+save_snapshots = 0
+
 # Geometry
 
 receivers = "data/input/receivers.txt"
@@ -11,7 +15,7 @@ offset = 5 # [m]
 
 # Model
 
-nx = 100
+nx = 200
 nz = 100
 
 nb     = 100
@@ -19,16 +23,15 @@ factor = 0.009
 
 dh = 10.0
 
-interfaces = []
+interfaces = [50]
 
-velocity_interfaces = [1500]
+velocity_interfaces = [1500, 2000]
 
 # Seismogram
 
 perc = 99
 
-seismogram_input_path = "data/output/seismogram_water_nt5001_dt0.0004_nrec84.bin"
-seismogram_output_path = "data/output/"
+seismogram_input_path = "data/output/"
 save_seismogram = false
 
 nt = 2001
