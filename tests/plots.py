@@ -12,7 +12,7 @@ import numpy as np
 from src import *
 
 PATH = "config/parameters.toml"
-SEIS_PATH = "data\\output\\rec_domain\\seismogram_nt1.12_dt0.001_nrec40_28.bin"
+SEIS_PATH = "data\\output\\rec_domain\\seismogram_nt0.2_dt0.001_nrec40_5.bin"
 
 cfg = Config(PATH).load()
 

@@ -16,21 +16,21 @@ def main():
 
   seis = Seismogram(geom, cfg)
 
-  mig = Migration()
-
-  acous = Acoustic(model, geom, seis, mig, cfg)
+  acous = Acoustic(model, geom, seis, cfg)
+  mig = Migration(acous)
   acous.get_ricker()
   acous.set_damper()
-  acous.fd()
+  acous.fd(mig)
+
+  mig.plot_transit_time()
 
   return acous, seis
 
 if __name__ == "__main__":
   acous, seis = main()
 
-  acous.plot_snapshots()
+  #acous.plot_snapshots()
   acous.plot_model_and_geometry()
 
   seis.remove_direct_wave()
   seis.plot(seis.seismogram)
-

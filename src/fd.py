@@ -11,11 +11,10 @@ from numba import njit, prange
 OUTPUT_PATH = "data/output/"
 
 class Acoustic:
-  def __init__(self, model: Model, geom: Geometry, seis: Seismogram, mig: Migration, c):
+  def __init__(self, model: Model, geom: Geometry, seis: Seismogram, c):
     self.mdl = model
     self.geom = geom
     self.seis = seis
-    self.mig = mig
     self.c = c
 
     self.damp2D = np.ones((self.mdl.nzz, self.mdl.nxx))
@@ -58,7 +57,7 @@ class Acoustic:
         self.damp2D[:self.mdl.nb,j] *= damp1D
         self.damp2D[-self.mdl.nb:,j] *= damp1D[::-1]
 
-  def fd(self):
+  def fd(self, migration=None):
     d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
     d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
@@ -104,9 +103,9 @@ class Acoustic:
           if not t % snap_ratio:
             self.snapshots.append(self.upre.copy())
 
-            if self.c.save_snapshots:
-              self.mig.save_src_domain()
-              self.mig.save_rec_domain(current_time)
+          if self.c.save_snapshots and migration is not None:
+              migration.save_src_domain()
+              migration.save_rec_domain(current_time)
 
               self.snap_id += 1
   
@@ -203,48 +202,48 @@ class Acoustic:
 
       plt.show()
 
-class Migration(Acoustic):
-  def __init__(self):
-    super().__init__()
+class Migration:
+  def __init__(self, acoustic: Acoustic):
+    self.ac = acoustic
 
   def save_src_domain(self):
     (
-      self.upre
+      self.ac.upre
       .flatten('F')
       .astype("float32", order='F')
       .tofile(
-        OUTPUT_PATH + "\\src_domain\\" + 
-        f"snapshot_{self.mdl.nxx}x{self.mdl.nzz}_{self.snap_id}.bin"
+        OUTPUT_PATH + "/src_domain/" +
+        f"snapshot_{self.ac.mdl.nxx}x{self.ac.mdl.nzz}_{self.ac.snap_id}.bin"
       )
     )
 
   def save_rec_domain(self, current_time):
-    seismogram = self.seis.seismogram
-    seismogram = seismogram[::-1, :]
+    seismogram = self.ac.seis.seismogram[::-1, :]
 
     (
       seismogram
       .flatten('F')
       .astype("float32", order='F')
       .tofile(
-        OUTPUT_PATH + "\\rec_domain\\" + 
-        f"seismogram_nt{current_time}_dt{self.c.dt}_nrec{self.geom.nrec}_{self.snap_id}.bin"
+        OUTPUT_PATH + "/rec_domain/" +
+        f"seismogram_nt{current_time}_dt{self.ac.c.dt}"
+        f"_nrec{self.ac.geom.nrec}_{self.ac.snap_id}.bin"
       )
     )
 
   def plot_transit_time(self):
     img = plt.imshow(
-        self.transit_time[
-            self.c.nb:self.c.nb + self.c.nz,
-            self.c.nb:self.c.nb + self.c.nx
+        self.ac.transit_time[
+            self.ac.c.nb:self.ac.c.nb + self.ac.c.nz,
+            self.ac.c.nb:self.ac.c.nb + self.ac.c.nx
         ],
         cmap="seismic",
         aspect="auto"
     )
 
-    plt.xlabel("Distance [m]", fontsize=13)
-    plt.ylabel("Depth [m]", fontsize=13)
-    plt.title("Transit Time", fontsize=16)
+    plt.xlabel("Distance [m]")
+    plt.ylabel("Depth [m]")
+    plt.title("Transit Time")
 
     cbar = plt.colorbar(img)
     cbar.set_label("Time [s]")
@@ -371,7 +370,7 @@ class Model:
 
   def smooth(self):
     # TODO: comparar 3 valores de sigma e comparar transit time
-    self.model = gaussian_filter(self.model, sigma=2)
+    self.model = gaussian_filter(self.model, sigma=4)
 
 class Geometry:
   def __init__(self, c) -> None:

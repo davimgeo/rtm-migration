@@ -1,3 +1,20 @@
-Perguntar Capuzzio:
-> Corrigir save do seismogram;
-> Padrão nome do seismogram/snap/modelo;
+> preciso corrigir o save do campo do receptor
+
+Etapas Próxima Semana:
+> Calcular o Nyquist do sinal para definir snap_num(mas primeiro gravar todos para facilitar)
+> Modelo homogeneo 
+> Criar cubo das pressões da fonte(upas, upre, ufut)
+> Crir cubo z,x,t do campo do receptor
+> Injetar uma ricker em *, e um sismograma em △(duas modelagens diferentes, duas funções diferentes)
+> Passar um loop de condição de imagem, invertendo cada coluna do campo do receptor e multiplicando -
+respectivamente com a coluna do campo da fonte, e depois somando a Matriz de Imagem.
+
+|--------------|
+|       *      | 
+|              | 
+|              | 
+|       △      |
+|--------------|
+
+Futuro:
+> quando estiver funcionando, posso adicionar o resíduo ao invés do sismograma(p ex utilizando ponto difrator)
