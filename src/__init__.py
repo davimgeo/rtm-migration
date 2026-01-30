@@ -1,11 +1,10 @@
-from .fd import Acoustic, Model, Geometry, Seismogram, Migration, measure_runtime
+from .fd import Migration, Model, Geometry, Seismogram, measure_runtime
 from .cfg import Config
 
 __all__ = [
-    "Config", "Acoustic",
+    "Config", "Migration",
     "Model", "Geometry",
-    "Seismogram", "measure_runtime",
-    "Migration"
+    "Seismogram", "measure_runtime"
 ]
 
 

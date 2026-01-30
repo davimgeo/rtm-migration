@@ -23,9 +23,9 @@ factor = 0.009
 
 dh = 10.0
 
-interfaces = [50]
+interfaces = []
 
-velocity_interfaces = [1500, 2000]
+velocity_interfaces = [1500]
 
 # Seismogram
 
@@ -34,7 +34,7 @@ perc = 99
 seismogram_input_path = "data/output/"
 save_seismogram = false
 
-nt = 2001
+nt = 1001
 dt = 1.0e-3
 
 # Wavelet
@@ -48,7 +48,6 @@ snap_path = "data/snapshots/"
 
 snap_num  = 50
 snap_bool = true
-
 
 
 

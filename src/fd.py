@@ -4,13 +4,11 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import animation
-from scipy.ndimage import gaussian_filter
-from matplotlib import animation
 from numba import njit, prange
 
 OUTPUT_PATH = "data/output/"
 
-class Acoustic:
+class Migration:
   def __init__(self, model: Model, geom: Geometry, seis: Seismogram, c):
     self.mdl = model
     self.geom = geom
@@ -22,18 +20,21 @@ class Acoustic:
     self.tlag = c.tlag
     self.ricker = np.zeros(self.c.nt)
 
-    self.upas = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.upre = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.ufut = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    # src domain
+    self.Psrc = np.zeros((self.mdl.nzz, self.mdl.nxx, self.c.nt))
 
+    # rc domain
     self.seismogram = seis.seismogram
+    self.Prec = np.zeros((self.mdl.nzz, self.mdl.nxx, self.c.nt))
 
     self.snapshots = []
 
-    self.transit_time = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.ref = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    #self.transit_time = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    #self.ref = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
     self.snap_id = 0
+
+    self.image = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
   def get_ricker(self):
     fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
@@ -57,7 +58,7 @@ class Acoustic:
         self.damp2D[:self.mdl.nb,j] *= damp1D
         self.damp2D[-self.mdl.nb:,j] *= damp1D[::-1]
 
-  def fd(self, migration=None):
+  def fd(self):
     d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
     d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
@@ -67,58 +68,111 @@ class Acoustic:
     arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
 
     for i in range(len(self.geom.srcxId)):
-      for t in range(self.c.nt - 1):
-        ix = int(self.geom.srcxId[i]) + self.mdl.nb
-        iz = int(self.geom.srczId[i]) + self.mdl.nb
-        self.upre[iz, ix] += self.ricker[t] / dh2
+      ix = int(self.geom.srcxId[i]) + self.mdl.nb
+      iz = int(self.geom.srczId[i]) + self.mdl.nb
+
+      for t in range(1, self.c.nt - 1):
+        self.Psrc[iz, ix, t] += self.ricker[t] / dh2
 
         dx2_dz2 = laplacian2d(
-            self.upre, d2u_dx2, d2u_dz2,
+            self.Psrc[:, :, t], d2u_dx2, d2u_dz2,
             self.mdl.nzz, self.mdl.nxx, dh2
         )
 
-        current_time = t * self.c.dt
-        update_tt(
-            self.upre,
-            self.ref,
-            self.transit_time,
-            current_time,
-            self.mdl.nzz,
-            self.mdl.nxx
-        )
-
-        self.upas = arg * dx2_dz2 + 2 * self.upre - self.ufut
-
-        self.ufut = self.upre * self.damp2D
-        self.upre = self.upas * self.damp2D
+        self.Psrc[:, :, t+1] = arg * dx2_dz2 + 2 * self.Psrc[:, :, t] - self.Psrc[:, :, t-1]
+        self.Psrc[:, :, t+1] *= self.damp2D
 
         for irec in range(self.geom.nrec):
           rx = int(self.geom.recx[irec]) + self.mdl.nb
           rz = int(self.geom.recz[irec]) + self.mdl.nb
-          self.seismogram[t, irec] = self.upre[rz, rx]
+          self.seismogram[t, irec] = self.Psrc[rz, rx, t]
 
-        #self.seis.plot(self.seismogram)
-
-        if self.c.snap_bool:
+        if self.c.save_snapshots:
           if not t % snap_ratio:
-            self.snapshots.append(self.upre.copy())
+            #self.snapshots.append(self.Psrc[:, :, t].copy())
+            self.save_src_domain(t)
+            self.snap_id += 1
 
-          if self.c.save_snapshots and migration is not None:
-              migration.save_src_domain()
-              migration.save_rec_domain(current_time)
-
-              self.snap_id += 1
-  
     if self.c.save_seismogram:
-      (
-        self.seis.seismogram
-        .flatten('F')
-        .astype("float32", order='F')
-        .tofile(
-          OUTPUT_PATH + 
-          f"seismogram_nt{self.c.nt}_dt{self.c.dt}_nrec{self.geom.nrec}.bin"
-        )
+      self.save_seismogram()
+
+    plt.imshow(self.Psrc[:, :, 501])
+    plt.show()
+
+  def fd_reverse(self):
+    d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+
+    dh2 = self.c.dh * self.c.dh
+    arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
+
+    self.seis.remove_direct_wave()
+
+    for t in range(self.c.nt - 2, 0, -1):
+      for i in range(self.geom.nrec):
+        ix = int(self.geom.recx[i]) + self.mdl.nb
+        iz = int(self.geom.recz[i]) + self.mdl.nb
+        self.Prec[iz, ix, t] += self.seismogram[t, i] / dh2
+
+      dx2_dz2 = laplacian2d(
+          self.Prec[:, :, t], d2u_dx2, d2u_dz2,
+          self.mdl.nzz, self.mdl.nxx, dh2
       )
+
+      self.Prec[:, :, t-1] = arg * dx2_dz2 + 2 * self.Prec[:, :, t] - self.Prec[:, :, t+1]
+      self.Prec[:, :, t-1] *= self.damp2D
+
+      if self.c.save_snapshots:
+        current_time = t * self.dt
+        self.save_rec_domain(current_time)
+
+    #fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(10,8))
+    #
+    #ax[0].imshow(self.Prec[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 801])
+    #ax[1].imshow(self.Prec[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 501])
+    #ax[2].imshow(self.Prec[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 301])
+    #
+    #plt.tight_layout()
+    #plt.show()
+
+  def get_image(self):
+    pass
+
+  def save_seismogram(self):
+    (
+      self.seis.seismogram
+      .flatten('F')
+      .astype("float32", order='F')
+      .tofile(
+        self.c.seismogram_output_path +
+        f"seismogram_nt{self.c.nt}_dt{self.c.dt}_nrec{self.geom.nrec}.bin"
+      )
+    )
+
+  def save_src_domain(self, t):
+    (
+      self.Psrc[:, :, t]
+      .flatten('F')
+      .astype("float32", order='F')
+      .tofile(
+        OUTPUT_PATH + "/src_domain/" +
+        f"snapshot_{self.mdl.nxx}x{self.mdl.nzz}_{self.snap_id}.bin"
+      )
+    )
+
+  def save_rec_domain(self, current_time):
+    seismogram = self.seismogram[::-1, :]
+
+    (
+      seismogram
+      .flatten('F')
+      .astype("float32", order='F')
+      .tofile(
+        OUTPUT_PATH + "/rec_domain/" +
+        f"seismogram_nt{current_time}_dt{self.c.dt}"
+        f"_nrec{self.nrec}_{self.snap_id}.bin"
+      )
+    )
 
   def plot_snapshots(self):
     xloc = np.linspace(0, self.mdl.nx-1, 11, dtype=int)
@@ -166,7 +220,7 @@ class Acoustic:
 
     plt.show()
     return ani
-  
+
   def plot_model_and_geometry(self):
       xloc = np.linspace(0, self.mdl.nx - 1, 11, dtype=int)
       xlab = np.array(xloc * self.c.dh, dtype=int)
@@ -201,54 +255,6 @@ class Acoustic:
       ax.legend()
 
       plt.show()
-
-class Migration:
-  def __init__(self, acoustic: Acoustic):
-    self.ac = acoustic
-
-  def save_src_domain(self):
-    (
-      self.ac.upre
-      .flatten('F')
-      .astype("float32", order='F')
-      .tofile(
-        OUTPUT_PATH + "/src_domain/" +
-        f"snapshot_{self.ac.mdl.nxx}x{self.ac.mdl.nzz}_{self.ac.snap_id}.bin"
-      )
-    )
-
-  def save_rec_domain(self, current_time):
-    seismogram = self.ac.seis.seismogram[::-1, :]
-
-    (
-      seismogram
-      .flatten('F')
-      .astype("float32", order='F')
-      .tofile(
-        OUTPUT_PATH + "/rec_domain/" +
-        f"seismogram_nt{current_time}_dt{self.ac.c.dt}"
-        f"_nrec{self.ac.geom.nrec}_{self.ac.snap_id}.bin"
-      )
-    )
-
-  def plot_transit_time(self):
-    img = plt.imshow(
-        self.ac.transit_time[
-            self.ac.c.nb:self.ac.c.nb + self.ac.c.nz,
-            self.ac.c.nb:self.ac.c.nb + self.ac.c.nx
-        ],
-        cmap="seismic",
-        aspect="auto"
-    )
-
-    plt.xlabel("Distance [m]")
-    plt.ylabel("Depth [m]")
-    plt.title("Transit Time")
-
-    cbar = plt.colorbar(img)
-    cbar.set_label("Time [s]")
-
-    plt.show()
 
 class Seismogram:
   def __init__(self, geom, c):
@@ -311,7 +317,7 @@ class Seismogram:
     y_plot = self.direct_wave / self.c.dt
 
     try:
-      ax.plot(x_plot, y_plot, 'r--')
+      ax.plot(x_plot[::-1], y_plot[::-1], 'r--')
     except:
       pass
     ############################
@@ -341,7 +347,7 @@ class Model:
     self.interfaces = c.interfaces
     self.value_interfaces = c.velocity_interfaces
 
-  def get(self) -> None:
+  def get_model(self) -> None:
     if not len(self.interfaces):
       self.model[:, :] = self.value_interfaces[0]
     else:
@@ -368,18 +374,18 @@ class Model:
 
     self.model = model_ext
 
-  def smooth(self):
-    # TODO: comparar 3 valores de sigma e comparar transit time
-    self.model = gaussian_filter(self.model, sigma=4)
-
 class Geometry:
   def __init__(self, c) -> None:
     self.c = c
 
-    self.recx,   self.recz   = np.array([]), np.array([])
+    self.recx, self.recz     = np.array([]), np.array([])
     self.srcxId, self.srczId = np.array([]), np.array([])
 
     self.nrec = 0
+
+    self.dt_canditates = np.array([])
+
+    self.max_dt = 0.0
 
   def get_geometry(self) -> None:
     receivers = np.loadtxt(self.c.receivers, delimiter=',', skiprows=1)
@@ -401,6 +407,17 @@ class Geometry:
       self.srczId = sources[:, 2]
 
     self.nrec = len(self.recx)
+
+  def get_dt_direct_wave(self, epsilon=0.70e-1):
+    for sx, sz in zip(self.srcxId, self.srczId):
+      ix = int(sx) + self.c.nb
+      iz = int(sz) + self.c.nb
+
+      rx = self.recx + self.c.nb
+      rz = self.recz + self.c.nb
+
+      off = np.sqrt((ix - rx)**2 + (iz - rz)**2) * self.c.dh
+      self.dt_canditates = (off / 1500.0) + self.c.tlag + epsilon
 
 @njit(parallel=True)
 def laplacian2d(

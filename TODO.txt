@@ -1,8 +1,15 @@
+> Terminar self.get_image() (fazendo a correlação cruzada)
+> Utilizar os snapshots salvos em data/output/
+> Para cada tiro eu tenho uma imagem, realizar vários tiros e somá-los
+> Brincar com os valores de snap_num para checar o resultado(10 em 10, 20 em 20)
+
+> utilizar modelagem no valor de velocidade da primeira camda para retirar a onda direta
+
 > preciso corrigir o save do campo do receptor
 
 Etapas Próxima Semana:
-> Calcular o Nyquist do sinal para definir snap_num(mas primeiro gravar todos para facilitar)
-> Modelo homogeneo 
+> Calcular o Nyquist do sinal para definir snap_num(mas primeiro gravar todos para facilitar) ✅
+> Modelo homogeneo ✅
 > Criar cubo das pressões da fonte(upas, upre, ufut)
 > Crir cubo z,x,t do campo do receptor
 > Injetar uma ricker em *, e um sismograma em △(duas modelagens diferentes, duas funções diferentes)
