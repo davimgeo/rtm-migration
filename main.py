@@ -19,7 +19,6 @@ def main():
   mig.get_ricker()
   mig.set_damper()
   mig.fd()
-  mig.fd_reverse()
 
   return mig, seis
 
@@ -27,7 +26,9 @@ if __name__ == "__main__":
   mig, seis = main()
 
   #mig.plot_snapshots()
+  mig.plot_model_and_geometry()
   seis.plot(seis.seismogram)
+  mig.plot_image()
 
 
 

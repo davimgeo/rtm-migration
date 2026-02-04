@@ -4,7 +4,7 @@ debug = true
 
 # Migration
 
-save_snapshots = 0
+save_snapshots = 1
 
 # Geometry
 

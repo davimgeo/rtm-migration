@@ -33,6 +33,7 @@ class Migration:
     #self.ref = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
     self.snap_id = 0
+    self.rec_snap_id = 0
 
     self.image = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
@@ -68,6 +69,10 @@ class Migration:
     arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
 
     for i in range(len(self.geom.srcxId)):
+      self.seismogram.fill(0.0)
+      self.Psrc.fill(0.0)
+      self.Prec.fill(0.0)
+
       ix = int(self.geom.srcxId[i]) + self.mdl.nb
       iz = int(self.geom.srczId[i]) + self.mdl.nb
 
@@ -93,20 +98,41 @@ class Migration:
             self.save_src_domain(t)
             self.snap_id += 1
 
+      #fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(10,8))
+    
+      #ax[0].imshow(self.Psrc[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 301])
+      #ax[1].imshow(self.Psrc[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 501])
+      #ax[2].imshow(self.Psrc[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 801])
+
+      #ax[0].set_title("Psrc, nt = 301")
+      #ax[1].set_title("Psrc, nt = 501")
+      #ax[2].set_title("Psrc, nt = 801")
+      
+      #plt.tight_layout()
+      #plt.show()
+
+      self.seis.remove_direct_wave(ix, iz)
+      self.fd_reverse()
+      self.get_image()
+
+      self.snap_id = 0
+      self.rec_snap_id = 0
+
+      #self.seis.plot(self.seismogram)
+
     if self.c.save_seismogram:
       self.save_seismogram()
-
-    plt.imshow(self.Psrc[:, :, 501])
-    plt.show()
 
   def fd_reverse(self):
     d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
     d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
+    snap_ratio = int(self.c.nt / self.c.snap_num)
+
     dh2 = self.c.dh * self.c.dh
     arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
 
-    self.seis.remove_direct_wave()
+    #self.seis.remove_direct_wave()
 
     for t in range(self.c.nt - 2, 0, -1):
       for i in range(self.geom.nrec):
@@ -123,20 +149,40 @@ class Migration:
       self.Prec[:, :, t-1] *= self.damp2D
 
       if self.c.save_snapshots:
-        current_time = t * self.dt
-        self.save_rec_domain(current_time)
+        if not t % snap_ratio:
+          self.save_rec_domain(t)
+          self.rec_snap_id += 1
 
     #fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(10,8))
-    #
-    #ax[0].imshow(self.Prec[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 801])
+    
+    #ax[0].imshow(self.Prec[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 301])
     #ax[1].imshow(self.Prec[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 501])
-    #ax[2].imshow(self.Prec[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 301])
-    #
+    #ax[2].imshow(self.Prec[self.mdl.nb:self.mdl.nb+self.mdl.nz, self.mdl.nb:self.mdl.nb+self.mdl.nx, 801])
+
+    #ax[0].set_title("Prec, nt = 301")
+    #ax[1].set_title("Prec, nt = 501")
+    #ax[2].set_title("Prec, nt = 801")
+    
     #plt.tight_layout()
     #plt.show()
 
   def get_image(self):
-    pass
+    nsnap = self.c.snap_num - 1
+
+    for i in range(nsnap):
+      src = np.fromfile(
+        OUTPUT_PATH + "/src_domain/" +
+           f"snapshot_{self.mdl.nxx}x{self.mdl.nzz}_{i}.bin",
+              dtype="float32"
+            ).reshape((self.mdl.nzz, self.mdl.nxx), order="F")
+
+      rec = np.fromfile(
+        OUTPUT_PATH + "/rec_domain/" +
+          f"rec_snapshot_{i}_dt{self.c.dt}_nrec{self.geom.nrec}.bin",
+            dtype="float32"
+          ).reshape((self.mdl.nzz, self.mdl.nxx), order="F")
+
+      self.image += src * rec
 
   def save_seismogram(self):
     (
@@ -160,17 +206,15 @@ class Migration:
       )
     )
 
-  def save_rec_domain(self, current_time):
-    seismogram = self.seismogram[::-1, :]
-
+  def save_rec_domain(self, t):
     (
-      seismogram
+      self.Prec[:, :, t]
       .flatten('F')
       .astype("float32", order='F')
       .tofile(
         OUTPUT_PATH + "/rec_domain/" +
-        f"seismogram_nt{current_time}_dt{self.c.dt}"
-        f"_nrec{self.nrec}_{self.snap_id}.bin"
+        f"rec_snapshot_{self.rec_snap_id}_dt{self.c.dt}"
+        f"_nrec{self.geom.nrec}.bin"
       )
     )
 
@@ -256,6 +300,38 @@ class Migration:
 
       plt.show()
 
+  def plot_image(self):
+      xloc = np.linspace(0, self.mdl.nx - 1, 11, dtype=int)
+      xlab = np.array(xloc * self.c.dh, dtype=int)
+
+      zloc = np.linspace(0, self.mdl.nz - 1, 7, dtype=int)
+      zlab = np.array(zloc * self.c.dh, dtype=int)
+
+      fig, ax = plt.subplots(figsize=(12, 5))
+
+      img = ax.imshow(
+          self.image[
+              self.mdl.nb:self.mdl.nb + self.mdl.nz,
+              self.mdl.nb:self.mdl.nb + self.mdl.nx
+          ],
+          aspect="auto",
+          cmap="jet",
+      )
+
+      ax.set_xticks(xloc)
+      ax.set_xticklabels(xlab)
+      ax.set_yticks(zloc)
+      ax.set_yticklabels(zlab)
+
+      ax.set_xlabel("Distance [m]")
+      ax.set_ylabel("Depth [m]")
+      ax.set_title("Image")
+
+      #plt.colorbar(img, ax=ax, label="VP [m/s]")
+      #ax.legend()
+
+      plt.show()
+
 class Seismogram:
   def __init__(self, geom, c):
     self.geom = geom
@@ -274,18 +350,14 @@ class Seismogram:
         path, dtype=np.float32, count=self.c.nt*self.geom.nrec
         ).reshape([self.c.nt, self.geom.nrec], order='F')
 
-  def remove_direct_wave(self, epsilon=0.70e-1):
+  def remove_direct_wave(self, ix, iz, epsilon=0.70e-1):
     nt = self.seismogram.shape[0]
 
-    for sx, sz in zip(self.geom.srcxId, self.geom.srczId):
-      ix = int(sx) + self.c.nb
-      iz = int(sz) + self.c.nb
+    rx = self.geom.recx + self.c.nb
+    rz = self.geom.recz + self.c.nb
 
-      rx = self.geom.recx + self.c.nb
-      rz = self.geom.recz + self.c.nb
-
-      off = np.sqrt((ix - rx)**2 + (iz - rz)**2) * self.c.dh
-      self.direct_wave = (off / 1500.0) + self.c.tlag + epsilon
+    off = np.sqrt((ix - rx)**2 + (iz - rz)**2) * self.c.dh
+    self.direct_wave = (off / 1500.0) + self.c.tlag + epsilon
 
     for j in range(self.geom.nrec):
       t0 = self.direct_wave[j]
@@ -312,15 +384,14 @@ class Seismogram:
     img = ax.imshow(seismogram, aspect="auto", cmap="Greys",
                     vmin=scale_min, vmax=scale_max)
 
-    # plot of direct wave curve
-    x_plot = np.arange(self.geom.nrec)
-    y_plot = self.direct_wave / self.c.dt
-
+    #plot of direct wave curve
     try:
-      ax.plot(x_plot[::-1], y_plot[::-1], 'r--')
+      x_plot = np.arange(self.geom.nrec)
+      y_plot = self.direct_wave / self.c.dt
+    
+      ax.plot(x_plot, y_plot, 'r--')
     except:
       pass
-    ############################
 
     ax.set_yticks(tloc)
     ax.set_yticklabels(tlab)
@@ -407,17 +478,6 @@ class Geometry:
       self.srczId = sources[:, 2]
 
     self.nrec = len(self.recx)
-
-  def get_dt_direct_wave(self, epsilon=0.70e-1):
-    for sx, sz in zip(self.srcxId, self.srczId):
-      ix = int(sx) + self.c.nb
-      iz = int(sz) + self.c.nb
-
-      rx = self.recx + self.c.nb
-      rz = self.recz + self.c.nb
-
-      off = np.sqrt((ix - rx)**2 + (iz - rz)**2) * self.c.dh
-      self.dt_canditates = (off / 1500.0) + self.c.tlag + epsilon
 
 @njit(parallel=True)
 def laplacian2d(
