@@ -25,3 +25,8 @@ respectivamente com a coluna do campo da fonte, e depois somando a Matriz de Ima
 
 Futuro:
 > quando estiver funcionando, posso adicionar o resíduo ao invés do sismograma(p ex utilizando ponto difrator)
+
+> Isolar responsabilidades do código(modelo, geom, resíduo/sismograma)
+> Pegar um traço do modelo de velocidade, pegar no mesmo traço a imagem migrada
+> um código que modela, um código que modela E migra
+> parar depropagação antes de chegar na fonte(perguntar para o timoteo qual valor de nt escolher)

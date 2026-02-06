@@ -5,11 +5,11 @@ from dataclasses import dataclass
 class Parameters:
   debug = False
 
-  save_snapshots = 0
-
   receivers = ""
   sources = ""
   offset = 0.0
+
+  model_path = ""
 
   nx = 0
   nz = 0
@@ -18,10 +18,6 @@ class Parameters:
   factor = 0.015
 
   dh = 0
-
-  interfaces = []
-
-  velocity_interfaces = []
 
   tlag = 0.0
 

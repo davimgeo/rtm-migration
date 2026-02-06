@@ -1,24 +1,24 @@
 from src import *
 
 PATH = "config/parameters.toml"
-
+import matplotlib.pyplot as plt
 @measure_runtime
 def main():
   cfg = Config(PATH).load()
 
   model = Model(cfg)
-  model.get_model()
+  model.load()
   model.set_boundary()
 
   geom = Geometry(cfg)
-  geom.get_geometry()
+  geom.get()
 
   seis = Seismogram(geom, cfg)
 
   mig = Migration(model, geom, seis, cfg)
   mig.get_ricker()
   mig.set_damper()
-  mig.fd()
+  mig.rtm()
 
   return mig, seis
 

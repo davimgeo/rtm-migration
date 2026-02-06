@@ -2,10 +2,6 @@
 
 debug = true
 
-# Migration
-
-save_snapshots = 1
-
 # Geometry
 
 receivers = "data/input/receivers.txt"
@@ -15,17 +11,15 @@ offset = 5 # [m]
 
 # Model
 
+model_path = "data/input/model_difractor_200x100.bin"
+
 nx = 200
 nz = 100
 
-nb     = 100
-factor = 0.009
-
 dh = 10.0
 
-interfaces = []
-
-velocity_interfaces = [1500]
+nb     = 100
+factor = 0.009
 
 # Seismogram
 
@@ -34,7 +28,7 @@ perc = 99
 seismogram_input_path = "data/output/"
 save_seismogram = false
 
-nt = 1001
+nt = 2001
 dt = 1.0e-3
 
 # Wavelet
