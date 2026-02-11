@@ -17,7 +17,6 @@ class Migration:
 
     self.damp2D = np.ones((self.mdl.nzz, self.mdl.nxx))
 
-    self.tlag = c.tlag
     self.ricker = np.zeros(self.c.nt)
 
     self.Psrc = np.zeros((self.mdl.nzz, self.mdl.nxx, self.c.nt))
@@ -25,12 +24,6 @@ class Migration:
 
     self.snapshots = []
     self.snap_ratio = int(self.c.nt / self.c.snap_num)
-
-    self.d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
-
-    self.dh2 = self.c.dh * self.c.dh
-    self.arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
 
     # these change over time, bad practice it seems
     # ask rodrigo
@@ -40,37 +33,39 @@ class Migration:
     self.ix, self.iz = 0, 0
 
     self.image = np.zeros((self.mdl.nzz, self.mdl.nxx))
-
-    #self.transit_time = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    #self.ref = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.gradient = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
   def rtm(self):
+    d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+
+    dh2 = self.c.dh * self.c.dh
+    arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
+  
     for isrc in range(len(self.geom.srcxId)):
 
-      self.d2u_dx2.fill(0.0)
-      self.d2u_dz2.fill(0.0)
       self.seis.seismogram.fill(0.0)
       self.Psrc.fill(0.0)
       self.Prec.fill(0.0)
 
       ix = int(self.geom.srcxId[isrc]) + self.c.nb
       iz = int(self.geom.srczId[isrc]) + self.c.nb
-
+      
       for t in range(1, self.c.nt - 1):
 
-        self.Psrc[iz, ix, t] += self.ricker[t] / self.dh2
+        self.Psrc[iz, ix, t] += self.ricker[t] / dh2
 
         dx2_dz2 = laplacian2d(
           self.Psrc[:, :, t],
-          self.d2u_dx2,
-          self.d2u_dz2,
+          d2u_dx2,
+          d2u_dz2,
           self.mdl.nzz,
           self.mdl.nxx,
-          self.dh2
+          dh2
         )
 
         self.Psrc[:, :, t + 1] = (
-          self.arg * dx2_dz2
+          arg * dx2_dz2
           + 2.0 * self.Psrc[:, :, t]
           - self.Psrc[:, :, t - 1]
         )
@@ -78,34 +73,37 @@ class Migration:
         self.Psrc[:, :, t + 1] *= self.damp2D
         self.Psrc[:, :, t] *= self.damp2D
 
-        for irec in range(self.geom.nrec):
-          rx = int(self.geom.recx[irec]) + self.c.nb
-          rz = int(self.geom.recz[irec]) + self.c.nb
-          self.seis.seismogram[t, irec] = self.Psrc[rz, rx, t]
-
         if self.c.snap_bool and not t % self.snap_ratio:
           self.snapshots.append(self.Psrc[:, :, t].copy())
 
-      for t in range(self.c.nt - 2, 500, -1):
+      self.seis.load_residual(
+        (
+          f"data/input/residuals/"
+          f"residual_nt{self.c.nt}_"
+          f"dt{self.c.dt}_"
+          f"nrec{self.geom.nrec}_"
+          f"src_{int(self.geom.srcxId[isrc])}.bin"
+        )
+      )
 
-        self.seis.remove_direct_wave(ix, iz)
+      for t in range(self.c.nt - 2, 500, -1):
 
         for irec in range(self.geom.nrec):
           rx = int(self.geom.recx[irec]) + self.c.nb
           rz = int(self.geom.recz[irec]) + self.c.nb
-          self.Prec[rz, rx, t] += self.seis.seismogram[t, irec] / self.dh2
+          self.Prec[rz, rx, t] += self.seis.residual[t, irec] / dh2
 
         dx2_dz2 = laplacian2d(
           self.Prec[:, :, t],
-          self.d2u_dx2,
-          self.d2u_dz2,
+          d2u_dx2,
+          d2u_dz2,
           self.mdl.nzz,
           self.mdl.nxx,
-          self.dh2
+          dh2
         )
 
         self.Prec[:, :, t - 1] = (
-          self.arg * dx2_dz2
+          arg * dx2_dz2
           + 2.0 * self.Prec[:, :, t]
           - self.Prec[:, :, t + 1]
         )
@@ -116,23 +114,9 @@ class Migration:
       for t in range(self.c.nt):
         self.image += self.Psrc[:, :, t] * self.Prec[:, :, t]
 
-    if self.c.save_seismogram:
-      self.save_seismogram()
-
-  def save_seismogram(self):
-    (
-      self.seis.seismogram
-      .flatten('F')
-      .astype("float32", order='F')
-      .tofile(
-        self.c.seismogram_output_path +
-        f"seismogram_nt{self.c.nt}_dt{self.c.dt}_nrec{self.geom.nrec}.bin"
-      )
-    )
-
   def get_ricker(self):
     fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
-    t = np.arange(self.c.nt) * self.c.dt - self.tlag
+    t = np.arange(self.c.nt) * self.c.dt - self.c.tlag
 
     arg = np.pi * (t * fc * np.pi) ** 2.0 
 
@@ -151,6 +135,31 @@ class Migration:
     for j in range(self.mdl.nxx):
       self.damp2D[:self.c.nb,j] *= damp1D
       self.damp2D[-self.c.nb:,j] *= damp1D[::-1]
+
+  def laplacian_filter(self):
+    inv_dh = 1.0 / (12.0 * self.c.dh * self.c.dh)
+
+    for i in range(2, self.mdl.nzz - 2):
+        for j in range(2, self.mdl.nxx - 2):
+          d2u_dx2 = (
+              - self.image[i-2, j]
+              + 16.0 * self.image[i-1, j]
+              - 30.0 * self.image[i, j]
+              + 16.0 * self.image[i+1, j]
+              - self.image[i+2, j]
+          ) * inv_dh
+
+          d2u_dz2 = (
+              - self.image[i, j-2]
+              + 16.0 * self.image[i, j-1]
+              - 30.0 * self.image[i, j]
+              + 16.0 * self.image[i, j+1]
+              - self.image[i, j+2]
+          ) * inv_dh
+
+          self.gradient[i, j] = d2u_dx2 + d2u_dz2
+
+    self.image = self.gradient
 
   def plot_snapshots(self):
     xloc = np.linspace(0, self.c.nx-1, 11, dtype=int)
@@ -268,37 +277,18 @@ class Seismogram:
     self.geom = geom
     self.c = c
 
-    self.seismogram_load = np.zeros((self.c.nt, self.geom.nrec))
+    self.residual = np.zeros((self.c.nt, self.geom.nrec))
 
     self.seismogram = np.zeros((self.c.nt, self.geom.nrec))
 
     self.direct_wave = np.array([])
 
-  def load(self, input_path):
-    path = input_path or self.c.seismogram_input_path
+  def load_residual(self, input_path):
+    path = input_path
 
-    self.seismogram_load = np.fromfile(
+    self.residual = np.fromfile(
         path, dtype=np.float32, count=self.c.nt*self.geom.nrec
         ).reshape([self.c.nt, self.geom.nrec], order='F')
-
-  def remove_direct_wave(self, ix, iz, epsilon=0.70e-1):
-    nt = self.seismogram.shape[0]
-
-    rx = self.geom.recx + self.c.nb
-    rz = self.geom.recz + self.c.nb
-
-    off = np.sqrt((ix - rx)**2 + (iz - rz)**2) * self.c.dh
-    self.direct_wave = (off / 1500.0) + self.c.tlag + epsilon
-
-    for j in range(self.geom.nrec):
-      t0 = self.direct_wave[j]
-      t0_idx = int(t0 / self.c.dt)
-
-      samples = np.arange(nt)
-
-      condition = samples <= t0_idx  
-
-      self.seismogram[condition, j] = 0.0
 
   def plot(self, seismogram):
     tloc = np.linspace(0, self.c.nt - 1, 11, dtype=int)
@@ -435,6 +425,9 @@ def measure_runtime(func):
 
   return wrapper
 
+#self.transit_time = np.zeros((self.mdl.nzz, self.mdl.nxx))
+#self.ref = np.zeros((self.mdl.nzz, self.mdl.nxx))
+
 #@njit(parallel=True)
 #def update_tt(
 #    upre: np.ndarray,
@@ -454,3 +447,22 @@ def measure_runtime(func):
 #      if abs(upre[i,j]) >= abs(ref[i,j]):
 #          ref[i,j] = upre[i,j]
 #          transit_time[i,j] = current_time
+
+#  def remove_direct_wave(self, ix, iz, epsilon=0.70e-1):
+#    nt = self.seismogram.shape[0]
+#
+#    rx = self.geom.recx + self.c.nb
+#    rz = self.geom.recz + self.c.nb
+#
+#    off = np.sqrt((ix - rx)**2 + (iz - rz)**2) * self.c.dh
+#    self.direct_wave = (off / 1500.0) + self.c.tlag + epsilon
+#
+#    for j in range(self.geom.nrec):
+#      t0 = self.direct_wave[j]
+#      t0_idx = int(t0 / self.c.dt)
+#
+#      samples = np.arange(nt)
+#
+#      condition = samples <= t0_idx  
+#
+#      self.seismogram[condition, j] = 0.0

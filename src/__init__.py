@@ -4,7 +4,5 @@ from .cfg import Config
 __all__ = [
     "Config", "Migration",
     "Model", "Geometry",
-    "Seismogram", "measure_runtime"
+    "Seismogram", "measure_runtime",
 ]
-
-

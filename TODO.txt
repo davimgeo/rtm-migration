@@ -1,32 +1,6 @@
-> Terminar self.get_image() (fazendo a correlação cruzada)
-> Utilizar os snapshots salvos em data/output/
-> Para cada tiro eu tenho uma imagem, realizar vários tiros e somá-los
-> Brincar com os valores de snap_num para checar o resultado(10 em 10, 20 em 20)
-
-> utilizar modelagem no valor de velocidade da primeira camda para retirar a onda direta
-
-> preciso corrigir o save do campo do receptor
-
-Etapas Próxima Semana:
-> Calcular o Nyquist do sinal para definir snap_num(mas primeiro gravar todos para facilitar) ✅
-> Modelo homogeneo ✅
-> Criar cubo das pressões da fonte(upas, upre, ufut)
-> Crir cubo z,x,t do campo do receptor
-> Injetar uma ricker em *, e um sismograma em △(duas modelagens diferentes, duas funções diferentes)
-> Passar um loop de condição de imagem, invertendo cada coluna do campo do receptor e multiplicando -
-respectivamente com a coluna do campo da fonte, e depois somando a Matriz de Imagem.
-
-|--------------|
-|       *      | 
-|              | 
-|              | 
-|       △      |
-|--------------|
-
-Futuro:
-> quando estiver funcionando, posso adicionar o resíduo ao invés do sismograma(p ex utilizando ponto difrator)
-
-> Isolar responsabilidades do código(modelo, geom, resíduo/sismograma)
-> Pegar um traço do modelo de velocidade, pegar no mesmo traço a imagem migrada
-> um código que modela, um código que modela E migra
-> parar depropagação antes de chegar na fonte(perguntar para o timoteo qual valor de nt escolher)
+> Isolar responsabilidades do código(modelo, geom, resíduo/sismograma) ✅
+> Pegar um traço do modelo de velocidade, pegar no mesmo traço a imagem migrada ✅
+> um código que modela, um código que modela E migra ✅
+> fazer o gradiente ✅
+> parar depropagação antes de chegar na fonte(perguntar para o timoteo qual valor de nt escolher) 
+# 1% da amplitude máxima da wavelet

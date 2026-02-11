@@ -17,7 +17,7 @@ SEIS_PATH = "data\\output\\rec_domain\\seismogram_nt0.2_dt0.001_nrec40_5.bin"
 cfg = Config(PATH).load()
 
 geom = Geometry(cfg)
-geom.get_geometry()
+geom.get()
 
 seis = Seismogram(geom, cfg)
 seis.load(SEIS_PATH)

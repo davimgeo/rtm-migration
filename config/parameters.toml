@@ -4,14 +4,14 @@ debug = true
 
 # Geometry
 
-receivers = "data/input/receivers.txt"
-sources = "data/input/sources.txt" 
+receivers = "data/input/geometry/receivers.txt"
+sources = "data/input/geometry/sources.txt" 
 
 offset = 5 # [m]
 
 # Model
 
-model_path = "data/input/model_difractor_200x100.bin"
+model_path = "data/input/models/model_2layer_200x100.bin"
 
 nx = 200
 nz = 100
@@ -25,8 +25,8 @@ factor = 0.009
 
 perc = 99
 
-seismogram_input_path = "data/output/"
-save_seismogram = false
+residual_input_path = "data/input/residuals/seismogram_nt2001_dt0.001_nrec40.bin"
+save_seismogram = true
 
 nt = 2001
 dt = 1.0e-3

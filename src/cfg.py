@@ -29,6 +29,8 @@ class Parameters:
   nt   = 0
   dt   = 0.0
 
+  residual_input_path = ""
+
   fmax = 0
   
   snap_path = ""
