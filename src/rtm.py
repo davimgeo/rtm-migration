@@ -375,21 +375,21 @@ class Geometry:
     receivers = np.loadtxt(self.c.receivers, delimiter=',', skiprows=1)
 
     if receivers.ndim == 1:
-      self.recx = np.array([receivers[1]])
-      self.recz = np.array([receivers[2]])
+      self.recx = np.array([receivers[1]]) / self.c.dh
+      self.recz = np.array([receivers[2]]) / self.c.dh
     else:
-      self.recx = receivers[:, 1]
-      self.recz = receivers[:, 2]
+      self.recx = receivers[:, 1] / self.c.dh
+      self.recz = receivers[:, 2] / self.c.dh
 
     sources = np.loadtxt(self.c.sources, delimiter=',', skiprows=1)
 
     if sources.ndim == 1:
-      self.srcxId = np.array([sources[1]])
-      self.srczId = np.array([sources[2]])
+      self.srcxId = np.array([sources[1]]) / self.c.dh
+      self.srczId = np.array([sources[2]]) / self.c.dh
     else:
-      self.srcxId = sources[:, 1]
-      self.srczId = sources[:, 2]
-
+      self.srcxId = sources[:, 1] / self.c.dh
+      self.srczId = sources[:, 2] / self.c.dh
+ 
     self.nrec = len(self.recx)
 
 @njit(parallel=True)
