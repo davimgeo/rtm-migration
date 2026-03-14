@@ -29,7 +29,7 @@ class Migration:
 
     self.snapshots_src = []
     self.snapshots_rec = []
-    self.snap_ratio = int(self.c.nt / self.c.snap_num)
+    self.snap_ratio = 10
 
     self.image = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.gradient = np.zeros((self.mdl.nzz, self.mdl.nxx))
@@ -50,9 +50,6 @@ class Migration:
   
     for isrc in range(len(self.geom.srcxId)):
 
-      self.snapshots_rec = []
-      self.snapshots_src = []
-
       self.seis.seismogram.fill(0.0)
       
       self.upas.fill(0.0)
@@ -62,6 +59,7 @@ class Migration:
       self.depas.fill(0.0)
       self.depre.fill(0.0)
       self.defut.fill(0.0)
+
       ix = int(self.geom.srcxId[isrc]) + self.c.nb
       iz = int(self.geom.srczId[isrc]) + self.c.nb
       
@@ -96,9 +94,9 @@ class Migration:
           self.snapshots_src.append(self.upas.copy())
 
       self.seis.remove_direct_wave(ix, iz)
-      #self.seis.plot(self.seis.residual)
+      self.seis.plot(self.seis.residual)
 
-      for t in range(self.c.nt - 2, 500, -1):
+      for t in range(self.c.nt - 1, 1, -1):
 
         for irec in range(self.geom.nrec):
           rx = int(self.geom.recx[irec]) + self.c.nb
@@ -123,11 +121,13 @@ class Migration:
         self.defut = self.depre * self.damp2D
         self.depre = self.depas * self.damp2D
 
-        if self.c.snap_bool and not t % self.snap_ratio:
+        tf = self.c.nt - t
+
+        if self.c.snap_bool and not tf % self.snap_ratio:
           self.snapshots_rec.append(self.depre.copy())
 
-      for i in range(len(self.snapshots_rec) - 1, 0, -1):
-        self.image += self.snapshots_src[-i] * self.snapshots_rec[i]
+    for i in range(199):
+      self.image += self.snapshots_src[i] * self.snapshots_rec[i]
 
 #      if not i % 10:
 #        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(10,8))
@@ -275,20 +275,13 @@ class Migration:
 
       fig, ax = plt.subplots(figsize=(12, 5))
 
-      img_data = self.image[
-          self.c.nb:self.c.nb + self.c.nz,
-          self.c.nb:self.c.nb + self.c.nx
-      ]
-
-      #vmin = np.percentile(img_data, 5)
-      #vmax = np.percentile(img_data, 99)
-
       img = ax.imshow(
-          img_data,
+          self.image[
+              self.c.nb:self.c.nb + self.c.nz,
+              self.c.nb:self.c.nb + self.c.nx
+          ],
           aspect="auto",
           cmap="Greys",
-          #vmin=vmin,
-          #vmax=vmax
       )
 
       ax.set_xticks(xloc)
@@ -300,7 +293,6 @@ class Migration:
       ax.set_ylabel("Depth [m]")
       ax.set_title("Image")
 
-      plt.colorbar(img, ax=ax)
       plt.show()
 
 class Seismogram:
@@ -510,3 +502,22 @@ def measure_runtime(func):
 #      if abs(upre[i,j]) >= abs(ref[i,j]):
 #          ref[i,j] = upre[i,j]
 #          transit_time[i,j] = current_time
+
+#  def remove_direct_wave(self, ix, iz, epsilon=0.70e-1):
+#    nt = self.seismogram.shape[0]
+#
+#    rx = self.geom.recx + self.c.nb
+#    rz = self.geom.recz + self.c.nb
+#
+#    off = np.sqrt((ix - rx)**2 + (iz - rz)**2) * self.c.dh
+#    self.direct_wave = (off / 1500.0) + self.c.tlag + epsilon
+#
+#    for j in range(self.geom.nrec):
+#      t0 = self.direct_wave[j]
+#      t0_idx = int(t0 / self.c.dt)
+#
+#      samples = np.arange(nt)
+#
+#      condition = samples <= t0_idx  
+#
+#      self.seismogram[condition, j] = 0.0

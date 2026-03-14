@@ -11,7 +11,7 @@ offset = 5 # [m]
 
 # Model
 
-model_path = "data/input/models/model_difractor_200x100.bin"
+model_path = "data/input/models/model_2layer_200x100.bin"
 
 nx = 200
 nz = 100
@@ -40,7 +40,7 @@ tlag = 0.3
 
 snap_path = "data/snapshots/"
 
-snap_num  = 500
+snap_num  = 100
 snap_bool = true
 
 

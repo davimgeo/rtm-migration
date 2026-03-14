@@ -1,0 +1,6 @@
+> Isolar responsabilidades do código(modelo, geom, resíduo/sismograma) ✅
+> Pegar um traço do modelo de velocidade, pegar no mesmo traço a imagem migrada ✅
+> um código que modela, um código que modela E migra ✅
+> fazer o gradiente ✅
+> parar depropagação antes de chegar na fonte(perguntar para o timoteo qual valor de nt escolher) 
+# 1% da amplitude máxima da wavelet
