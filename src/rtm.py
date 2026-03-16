@@ -424,6 +424,16 @@ class Model:
 
     self.model = model_ext
 
+  def gaussian_smooth(self, std: float, mean: float) -> None:
+    x = np.linspace(-std, std, self.c.nz)
+    gaussian = ( 
+      1 / (std * np.sqrt(2 * np.pi)) 
+      * np.exp(-0.5 * ((x - mean) / std) ** 2)
+    )
+
+    for col in range(self.c.nx):
+      self.model[:, col] = np.convolve(self.model[:, col], gaussian, mode="same")
+
 class Geometry:
   def __init__(self, c) -> None:
     self.c = c

@@ -11,6 +11,7 @@ def main():
     model.load()
   else:
     model.get()
+  model.gaussian_smooth(std=0.3, mean=1)
   model.set_boundary()
 
   geom = Geometry(cfg)
@@ -21,6 +22,7 @@ def main():
     seis.load_residual()
 
   mig = Migration(model, geom, seis, cfg)
+  mig.plot_model_and_geometry()
   mig.get_ricker()
   mig.set_damper()
   mig.rtm()
