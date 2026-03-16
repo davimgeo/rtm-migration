@@ -9,7 +9,12 @@ class Parameters:
   sources = ""
   offset = 0.0
 
+  load_model = False
+
   model_path = ""
+
+  value_interfaces = []
+  interfaces = []
 
   nx = 0
   nz = 0
@@ -29,6 +34,7 @@ class Parameters:
   nt   = 0
   dt   = 0.0
 
+  load_residual = False
   residual_input_path = ""
 
   fmax = 0

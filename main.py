@@ -7,13 +7,18 @@ def main():
   cfg = Config(PATH).load()
 
   model = Model(cfg)
-  model.load()
+  if cfg.load_model:
+    model.load()
+  else:
+    model.get()
   model.set_boundary()
 
   geom = Geometry(cfg)
   geom.get()
 
   seis = Seismogram(geom, cfg)
+  if cfg.load_residual:
+    seis.load_residual()
 
   mig = Migration(model, geom, seis, cfg)
   mig.get_ricker()

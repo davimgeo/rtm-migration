@@ -11,7 +11,12 @@ offset = 5 # [m]
 
 # Model
 
+load_model = false
+
 model_path = "data/input/models/model_difractor_200x100.bin"
+
+value_interfaces = [1500, 2000]
+interfaces = [50]
 
 nx = 200
 nz = 100
@@ -24,6 +29,8 @@ factor = 0.009
 # Seismogram
 
 perc = 99
+
+load_residual = false
 
 residual_input_path = "data/input/residuals/seismogram_nt2001_dt0.001_nrec40.bin"
 save_seismogram = true

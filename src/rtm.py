@@ -62,6 +62,7 @@ class Migration:
       self.depas.fill(0.0)
       self.depre.fill(0.0)
       self.defut.fill(0.0)
+
       ix = int(self.geom.srcxId[isrc]) + self.c.nb
       iz = int(self.geom.srczId[isrc]) + self.c.nb
       
@@ -95,8 +96,8 @@ class Migration:
         if self.c.snap_bool and not t % self.snap_ratio:
           self.snapshots_src.append(self.upas.copy())
 
-      self.seis.remove_direct_wave(ix, iz)
-      #self.seis.plot(self.seis.residual)
+      if not self.c.load_residual:
+        self.seis.remove_direct_wave(ix, iz)
 
       for t in range(self.c.nt - 2, 500, -1):
 
@@ -128,14 +129,6 @@ class Migration:
 
       for i in range(len(self.snapshots_rec) - 1, 0, -1):
         self.image += self.snapshots_src[-i] * self.snapshots_rec[i]
-
-#      if not i % 10:
-#        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(10,8))
-#
-#        ax[0].imshow(self.snapshots_src[i])
-#        ax[1].imshow(self.snapshots_rec[i])
-#
-#        plt.show()
 
   def get_ricker(self):
     fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
@@ -401,6 +394,16 @@ class Model:
     self.model = np.fromfile(
       self.c.model_path, dtype=np.float32, count=self.c.nx*self.c.nz
     ).reshape([self.c.nz, self.c.nx], order='F')
+
+  def get(self) -> None:
+    if not len(self.c.interfaces): 
+      self.model[:, :] = self.c.value_interfaces[0] 
+
+    else: 
+      self.model[:self.c.interfaces[0], :] = self.c.value_interfaces[0]
+
+    for layer, velocity in enumerate(self.c.value_interfaces[1:]):
+      self.model[self.c.interfaces[layer]:, :] = velocity
 
   def set_boundary(self) -> None:
     model_ext = np.zeros((self.nzz, self.nxx))
