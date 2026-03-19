@@ -27,117 +27,139 @@ class Migration:
     self.depre = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.defut = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
-    self.snapshots_src = []
-    self.snapshots_rec = []
+    self.d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+
+    self.dh2 = self.c.dh * self.c.dh
+    self.arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
+
     self.snap_ratio = int(self.c.nt / self.c.snap_num)
+    self.nsnaps = self.c.nt // self.snap_ratio
+
+    self.snapshots_src = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
+    self.snapshots_rec = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
 
     self.image = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.gradient = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
-    # these change over time, bad practice it seems
-    # ask rodrigo
-    self.snap_id = 0
-    self.rec_snap_id = 0
-
     self.ix, self.iz = 0, 0
 
-  def rtm(self):
-    d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    # snapshot indices
+    self.snap_id_src = 0
+    self.snap_id_rec = self.nsnaps - 1
 
-    dh2 = self.c.dh * self.c.dh
-    arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
-  
+  def rtm(self):
     for isrc in range(len(self.geom.srcxId)):
 
-      self.snapshots_rec = []
-      self.snapshots_src = []
+      self.zero_out_matrices()
 
-      self.seis.seismogram.fill(0.0)
-      
-      self.upas.fill(0.0)
-      self.upre.fill(0.0)
-      self.ufut.fill(0.0)
+      self.ix = int(self.geom.srcxId[isrc]) + self.c.nb
+      self.iz = int(self.geom.srczId[isrc]) + self.c.nb
 
-      self.depas.fill(0.0)
-      self.depre.fill(0.0)
-      self.defut.fill(0.0)
-
-      ix = int(self.geom.srcxId[isrc]) + self.c.nb
-      iz = int(self.geom.srczId[isrc]) + self.c.nb
-      
       for t in range(1, self.c.nt - 1):
 
-        self.upre[iz, ix] += self.ricker[t] / dh2
+        self.foward_propagation(t)
 
-        dx2_dz2 = laplacian2d(
-          self.upre,
-          d2u_dx2,
-          d2u_dz2,
-          self.mdl.nzz,
-          self.mdl.nxx,
-          dh2
-        )
-
-        self.upas = (
-          arg * dx2_dz2
-          + 2.0 * self.upre
-          - self.ufut
-        )
-
-        self.ufut = self.upre * self.damp2D
-        self.upre = self.upas * self.damp2D
-
-        for irec in range(self.geom.nrec):
-          rx = int(self.geom.recx[irec]) + self.c.nb
-          rz = int(self.geom.recz[irec]) + self.c.nb
-          self.seis.seismogram[t, irec] = self.upre[rz, rx]
+        self.register_seismogram(t)
 
         if self.c.snap_bool and not t % self.snap_ratio:
-          self.snapshots_src.append(self.upas.copy())
+          self.get_src_snaps()
 
       if not self.c.load_residual:
-        self.seis.remove_direct_wave(ix, iz)
+        self.seis.remove_direct_wave(self.ix, self.iz)
 
       for t in range(self.c.nt - 2, 500, -1):
 
-        for irec in range(self.geom.nrec):
-          rx = int(self.geom.recx[irec]) + self.c.nb
-          rz = int(self.geom.recz[irec]) + self.c.nb
-          self.depre[rz, rx] += self.seis.residual[t, irec] / dh2
+        self.inject_residual(t)
 
-        dx2_dz2 = laplacian2d(
-          self.depre,
-          d2u_dx2,
-          d2u_dz2,
-          self.mdl.nzz,
-          self.mdl.nxx,
-          dh2
-        )
-
-        self.depas = (
-          arg * dx2_dz2
-          + 2.0 * self.depre
-          - self.defut
-        )
-
-        self.defut = self.depre * self.damp2D
-        self.depre = self.depas * self.damp2D
+        self.backward_propagation()
 
         if self.c.snap_bool and not t % self.snap_ratio:
-          self.snapshots_rec.append(self.depre.copy())
+          self.get_rc_snaps()
 
-      for i in range(len(self.snapshots_rec) - 1, 0, -1):
-        self.image += self.snapshots_src[-i] * self.snapshots_rec[i]
+      self.image_condition()
+
+  def zero_out_matrices(self):
+    self.seis.seismogram.fill(0.0)
+
+    self.upas.fill(0.0)
+    self.upre.fill(0.0)
+    self.ufut.fill(0.0)
+
+    self.depas.fill(0.0)
+    self.depre.fill(0.0)
+    self.defut.fill(0.0)
+
+    self.snap_id_src = 0
+    self.snap_id_rec = self.nsnaps - 1
+
+  def foward_propagation(self, t):
+    self.upre[self.iz, self.ix] += self.ricker[t] / self.dh2
+
+    lap = laplacian2d(
+      self.upre,
+      self.d2u_dx2,
+      self.d2u_dz2,
+      self.mdl.nzz,
+      self.mdl.nxx,
+      self.dh2
+    )
+
+    self.upas = (
+      self.arg * lap
+      + 2.0 * self.upre
+      - self.ufut
+    )
+
+    self.ufut = self.upre * self.damp2D
+    self.upre = self.upas * self.damp2D
+
+  def register_seismogram(self, t):
+    for irec in range(self.geom.nrec):
+      rx = int(self.geom.recx[irec]) + self.c.nb
+      rz = int(self.geom.recz[irec]) + self.c.nb
+      self.seis.seismogram[t, irec] = self.upre[rz, rx]
+
+  def get_src_snaps(self):
+    self.snapshots_src[self.snap_id_src] = self.upas
+    self.snap_id_src += 1
+
+  def inject_residual(self, t):
+    for irec in range(self.geom.nrec):
+      rx = int(self.geom.recx[irec]) + self.c.nb
+      rz = int(self.geom.recz[irec]) + self.c.nb
+      self.depre[rz, rx] += self.seis.residual[t, irec] / self.dh2
+
+  def backward_propagation(self):
+    lap = laplacian2d(
+      self.depre,
+      self.d2u_dx2,
+      self.d2u_dz2,
+      self.mdl.nzz,
+      self.mdl.nxx,
+      self.dh2
+    )
+
+    self.depas = (
+      self.arg * lap
+      + 2.0 * self.depre
+      - self.defut
+    )
+
+    self.defut = self.depre * self.damp2D
+    self.depre = self.depas * self.damp2D
+
+  def get_rc_snaps(self):
+    self.snapshots_rec[self.snap_id_rec] = self.depre
+    self.snap_id_rec -= 1
+
+  def image_condition(self):
+    self.image += np.sum(self.snapshots_src * self.snapshots_rec, axis=0)
 
     #export_bin(self.image[
     #      self.c.nb:self.c.nb + self.c.nz,
     #      self.c.nb:self.c.nb + self.c.nx
     #  ], OUTPUT_PATH, width=self.c.nx, height=self.c.nz)
-    import sys
-    lista = self.snapshots_src
-    mem_total = sys.getsizeof(lista) + sum(arr.nbytes for arr in lista)
-    print(mem_total)
 
   def get_ricker(self):
     fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
