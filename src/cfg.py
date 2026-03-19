@@ -5,6 +5,8 @@ from dataclasses import dataclass
 class Parameters:
   debug = False
 
+  create_geom = False
+
   receivers = ""
   sources = ""
   offset = 0.0

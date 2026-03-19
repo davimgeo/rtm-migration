@@ -4,6 +4,8 @@ debug = true
 
 # Geometry
 
+create_geom = false
+
 receivers = "data/input/geometry/receivers.txt"
 sources = "data/input/geometry/sources.txt" 
 
@@ -47,7 +49,7 @@ tlag = 0.3
 
 snap_path = "data/snapshots/"
 
-snap_num  = 500
+snap_num  = 700
 snap_bool = true
 
 

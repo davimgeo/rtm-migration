@@ -130,6 +130,15 @@ class Migration:
       for i in range(len(self.snapshots_rec) - 1, 0, -1):
         self.image += self.snapshots_src[-i] * self.snapshots_rec[i]
 
+    #export_bin(self.image[
+    #      self.c.nb:self.c.nb + self.c.nz,
+    #      self.c.nb:self.c.nb + self.c.nx
+    #  ], OUTPUT_PATH, width=self.c.nx, height=self.c.nz)
+    import sys
+    lista = self.snapshots_src
+    mem_total = sys.getsizeof(lista) + sum(arr.nbytes for arr in lista)
+    print(mem_total)
+
   def get_ricker(self):
     fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
     t = np.arange(self.c.nt) * self.c.dt - self.c.tlag
@@ -224,42 +233,7 @@ class Migration:
     plt.show()
     return ani
 
-  def plot_model_and_geometry(self):
-      xloc = np.linspace(0, self.c.nx - 1, 11, dtype=int)
-      xlab = np.array(xloc * self.c.dh, dtype=int)
-
-      zloc = np.linspace(0, self.c.nz - 1, 7, dtype=int)
-      zlab = np.array(zloc * self.c.dh, dtype=int)
-
-      fig, ax = plt.subplots(figsize=(12, 5))
-
-      img = ax.imshow(
-          self.mdl.model[
-              self.c.nb:self.c.nb + self.c.nz,
-              self.c.nb:self.c.nb + self.c.nx
-          ],
-          aspect="auto",
-          cmap="jet",
-      )
-
-      ax.plot(self.geom.recx, self.geom.recz, 'bv', label="Receivers")
-      ax.plot(self.geom.srcxId, self.geom.srczId, 'r*', markersize=12, label="Source")
-
-      ax.set_xticks(xloc)
-      ax.set_xticklabels(xlab)
-      ax.set_yticks(zloc)
-      ax.set_yticklabels(zlab)
-
-      ax.set_xlabel("Distance [m]")
-      ax.set_ylabel("Depth [m]")
-      ax.set_title("Velocity Model")
-
-      plt.colorbar(img, ax=ax, label="VP [m/s]")
-      ax.legend()
-
-      plt.show()
-
-  def plot_image(self):
+  def plot_image(self, perc=99):
       xloc = np.linspace(0, self.c.nx - 1, 11, dtype=int)
       xlab = np.array(xloc * self.c.dh, dtype=int)
 
@@ -273,15 +247,15 @@ class Migration:
           self.c.nb:self.c.nb + self.c.nx
       ]
 
-      #vmin = np.percentile(img_data, 5)
-      #vmax = np.percentile(img_data, 99)
+      vmin = np.percentile(img_data, 100 - perc)
+      vmax = np.percentile(img_data, perc)
 
       img = ax.imshow(
           img_data,
           aspect="auto",
           cmap="Greys",
-          #vmin=vmin,
-          #vmax=vmax
+          vmin=vmin,
+          vmax=vmax
       )
 
       ax.set_xticks(xloc)
@@ -382,20 +356,27 @@ class Seismogram:
     plt.show()
 
 class Model:
-  def __init__(self, c) -> None:
+  def __init__(self, c, geom) -> None:
     self.c = c
+    self.geom = geom
 
     self.nxx = 2*self.c.nb + self.c.nx
     self.nzz = 2*self.c.nb + self.c.nz
 
     self.model = np.zeros((self.c.nz, self.c.nx))
 
+  def get(self):
+    if self.c.load_model:
+      self.load()
+    else:
+      self.create()
+
   def load(self) -> None:
     self.model = np.fromfile(
       self.c.model_path, dtype=np.float32, count=self.c.nx*self.c.nz
     ).reshape([self.c.nz, self.c.nx], order='F')
 
-  def get(self) -> None:
+  def create(self) -> None:
     if not len(self.c.interfaces): 
       self.model[:, :] = self.c.value_interfaces[0] 
 
@@ -424,15 +405,57 @@ class Model:
 
     self.model = model_ext
 
-  def gaussian_smooth(self, std: float, mean: float) -> None:
-    x = np.linspace(-std, std, self.c.nz)
-    gaussian = ( 
-      1 / (std * np.sqrt(2 * np.pi)) 
-      * np.exp(-0.5 * ((x - mean) / std) ** 2)
-    )
+  def model_gaussian_smooth(self, sigma: float, truncate: float = 4.0) -> None:
+      radius = int(truncate * sigma + 0.5)
 
-    for col in range(self.c.nx):
-      self.model[:, col] = np.convolve(self.model[:, col], gaussian, mode="same")
+      x = np.arange(-radius, radius + 1)
+      gaussian = np.exp(-0.5 * (x**2) / (sigma**2))
+
+      gaussian /= gaussian.sum()
+
+      for col in range(self.c.nx):
+        data = self.model[:, col]
+
+        padded = np.pad(data, radius, mode="reflect")
+
+        smoothed = np.convolve(padded, gaussian, mode="same")
+
+        self.model[:, col] = smoothed[radius:-radius]
+
+  def plot_model_and_geometry(self):
+      xloc = np.linspace(0, self.c.nx - 1, 11, dtype=int)
+      xlab = np.array(xloc * self.c.dh, dtype=int)
+
+      zloc = np.linspace(0, self.c.nz - 1, 7, dtype=int)
+      zlab = np.array(zloc * self.c.dh, dtype=int)
+
+      fig, ax = plt.subplots(figsize=(12, 5))
+
+      img = ax.imshow(
+          self.model[
+              self.c.nb:self.c.nb + self.c.nz,
+              self.c.nb:self.c.nb + self.c.nx
+          ],
+          aspect="auto",
+          cmap="jet",
+      )
+
+      ax.plot(self.geom.recx, self.geom.recz, 'bv', label="Receivers")
+      ax.plot(self.geom.srcxId, self.geom.srczId, 'r*', markersize=12, label="Source")
+
+      ax.set_xticks(xloc)
+      ax.set_xticklabels(xlab)
+      ax.set_yticks(zloc)
+      ax.set_yticklabels(zlab)
+
+      ax.set_xlabel("Distance [m]")
+      ax.set_ylabel("Depth [m]")
+      ax.set_title("Velocity Model")
+
+      plt.colorbar(img, ax=ax, label="VP [m/s]")
+      ax.legend()
+
+      plt.show()
 
 class Geometry:
   def __init__(self, c) -> None:
@@ -447,7 +470,13 @@ class Geometry:
 
     self.max_dt = 0.0
 
-  def get(self) -> None:
+  def get(self):
+    if self.c.create_geom:
+      self.create()
+    else:
+      self.load()
+
+  def load(self) -> None:
     receivers = np.loadtxt(self.c.receivers, delimiter=',', skiprows=1)
 
     if receivers.ndim == 1:
@@ -467,6 +496,23 @@ class Geometry:
       self.srczId = sources[:, 2] / self.c.dh
  
     self.nrec = len(self.recx)
+
+  def create(self) -> None:
+      self.nrec = int(self.c.nx / self.c.offset)
+
+      recId = np.arange(1, self.nrec + 1)
+      self.recx = np.arange(0, self.nrec) * self.c.offset * self.c.dh
+      self.recz = np.full(self.nrec, self.c.rec_depth)
+
+      data = np.column_stack((recId, self.recx, self.recz))
+
+      np.savetxt(
+          "data\\input\\geometry\\receivers.txt",
+          data,
+          fmt="%.0f",
+          delimiter=",",
+          header="recId, recx, recz",
+      )
 
 @njit(parallel=True)
 def laplacian2d(
@@ -500,6 +546,9 @@ def measure_runtime(func):
     return result
 
   return wrapper
+
+def export_bin(a: np.array, path: str, width: int, height: int):
+  a.flatten('F').astype('float32', order='F').tofile(path + f"model_vp_2d_{width}x{height}.bin")
 
 #self.transit_time = np.zeros((self.mdl.nzz, self.mdl.nxx))
 #self.ref = np.zeros((self.mdl.nzz, self.mdl.nxx))
