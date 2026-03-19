@@ -1,1 +1,0 @@
-![image_gradient](https://imgur.com/a/ojVdh9D)

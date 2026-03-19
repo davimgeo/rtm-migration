@@ -153,13 +153,82 @@ class Migration:
     self.snapshots_rec[self.snap_id_rec] = self.depre
     self.snap_id_rec -= 1
 
-  def image_condition(self):
-    self.image += np.sum(self.snapshots_src * self.snapshots_rec, axis=0)
+  def image_condition(self, epsilon=1e-9):
+    scale = self.snap_ratio * self.c.dt
 
-    #export_bin(self.image[
-    #      self.c.nb:self.c.nb + self.c.nz,
-    #      self.c.nb:self.c.nb + self.c.nx
-    #  ], OUTPUT_PATH, width=self.c.nx, height=self.c.nz)
+    prod = self.snapshots_src * self.snapshots_rec
+
+    id = 0
+    if id == 0:
+      # I_0
+      self.image += scale * np.sum(
+        prod,
+        axis=0
+      )
+
+    elif id == 1:
+      # I_1
+      mask = prod > 0.0
+      self.image += scale * np.sum(prod * mask, axis=0)  
+
+    elif id == 2:
+      # I_2
+      mask = prod < 0.0
+      self.image += scale * np.sum(prod * mask, axis=0)
+
+    elif id == 3:
+      # I_3
+      self.image += scale * np.sum(
+          (prod) /
+          (np.sqrt(
+              self.auto_correlation(self.snapshots_src) *
+              self.auto_correlation(self.snapshots_rec)
+          ) + epsilon),
+          axis=0
+      )
+
+    elif id == 5:
+      # I_5
+      w = 1 / (self.snapshots_src ** 2 + epsilon)
+
+      self.image += scale * np.sum(
+        (prod) / (self.snapshots_src ** 2 + w*(epsilon**2)),
+        axis=0
+      )
+
+    elif id == 6:
+      # I_4
+      self.image += scale * np.sum(
+        (prod) /
+        (np.sqrt(
+          self.snapshots_src * self.snapshots_src
+          ) + epsilon ** 2),
+          axis=0
+      )
+
+    elif id == 7:
+      # I_4
+      mask = prod > 0.0
+      self.image += scale * np.sum(
+        (prod * mask) /
+        (np.sqrt(
+          self.snapshots_src * self.snapshots_src * mask
+          ) + epsilon ** 2),
+          axis=0
+      )
+
+    save = 0
+    if save:
+      export_bin(self.image[
+            self.c.nb:self.c.nb + self.c.nz,
+            self.c.nb:self.c.nb + self.c.nx
+        ], OUTPUT_PATH, width=self.c.nx, height=self.c.nz, name="image_700snaps.bin"
+        )
+      
+      print(f"Sucessfuly saved {OUTPUT_PATH + "image_700snaps.bin"}")
+
+  def auto_correlation(self, A):
+    return np.sum(A * A, axis=0)
 
   def get_ricker(self):
     fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
@@ -488,10 +557,6 @@ class Geometry:
 
     self.nrec = 0
 
-    self.dt_canditates = np.array([])
-
-    self.max_dt = 0.0
-
   def get(self):
     if self.c.create_geom:
       self.create()
@@ -569,8 +634,10 @@ def measure_runtime(func):
 
   return wrapper
 
-def export_bin(a: np.array, path: str, width: int, height: int):
-  a.flatten('F').astype('float32', order='F').tofile(path + f"model_vp_2d_{width}x{height}.bin")
+def export_bin(
+    a: np.array, path: str, width: int, height: int, name: str
+  ):
+  a.flatten('F').astype('float32', order='F').tofile(path + f"{name}_{width}x{height}.bin")
 
 #self.transit_time = np.zeros((self.mdl.nzz, self.mdl.nxx))
 #self.ref = np.zeros((self.mdl.nzz, self.mdl.nxx))

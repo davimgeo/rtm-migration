@@ -1,2 +1,2 @@
-Runtime Full: 238.5476 seconds
-Runtime 700 snaps: 17.5352 seconds
+Runtime Full: 81.2951 seconds
+Runtime 700 snaps: 10.5836 seconds
