@@ -10,12 +10,13 @@ OUTPUT_PATH = "data/output/"
 
 nx, nz = 200, 100
 
+nsnaps = 251
+
 image_full = np.fromfile(
     OUTPUT_PATH + "image_full_200x100.bin", dtype=np.float32,
     count=nx*nz
 ).reshape([nz, nx], order='F')
 
-nsnaps = 251
 
 image_700snaps = np.fromfile(
     OUTPUT_PATH + f"image_{nsnaps}snaps.bin_200x100.bin", dtype=np.float32,

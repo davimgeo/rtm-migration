@@ -35,11 +35,11 @@ class Migration:
 
     self.snap_ratio = int(self.c.nt / self.c.snap_num)
 
-    self.snap_times = np.arange(0, self.c.nt, self.snap_ratio)
-    self.snap_times = self.snap_times[self.snap_times >= 500]
-    self.snap_set = set(self.snap_times)
+    self.snap_times = np.linspace(500, self.c.nt - 2, self.c.snap_num)
+    self.snap_times = np.unique(self.snap_times.astype(int))
 
     self.nsnaps = len(self.snap_times)
+    self.snap_set = set(self.snap_times)
 
     self.snapshots_src = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
     self.snapshots_rec = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
@@ -65,9 +65,7 @@ class Migration:
         self.foward_propagation(t)
         self.register_seismogram(t)
 
-        if self.c.snap_bool and t in self.snap_set:
-          self.snapshots_src[self.snap_id_src] = self.upre
-          self.snap_id_src += 1
+        self.get_src_snaps(t)
 
       if not self.c.load_residual:
         self.seis.remove_direct_wave(self.ix, self.iz)
@@ -75,12 +73,10 @@ class Migration:
       for t in range(self.c.nt - 2, 500, -1):
 
         self.inject_residual(t)
+        self.get_rc_snaps(t)
+
         self.backward_propagation()
-
-        if self.c.snap_bool and t in self.snap_set:
-          self.snapshots_rec[self.snap_id_rec] = self.depre
-          self.snap_id_rec -= 1
-
+        
       self.image_condition()
 
   def zero_out_matrices(self):
@@ -124,6 +120,11 @@ class Migration:
       rz = int(self.geom.recz[irec]) + self.c.nb
       self.seis.seismogram[t, irec] = self.upre[rz, rx]
 
+  def get_src_snaps(self, t):
+    if self.c.snap_bool and t in self.snap_set:
+      self.snapshots_src[self.snap_id_src] = self.upre.copy()
+      self.snap_id_src += 1
+
   def inject_residual(self, t):
     for irec in range(self.geom.nrec):
       rx = int(self.geom.recx[irec]) + self.c.nb
@@ -149,11 +150,20 @@ class Migration:
     self.defut = self.depre * self.damp2D
     self.depre = self.depas * self.damp2D
 
-  def get_rc_snaps(self):
-    self.snapshots_rec[self.snap_id_rec] = self.depre
-    self.snap_id_rec -= 1
+  def get_rc_snaps(self, t):
+    if self.c.snap_bool and t in self.snap_set:
+      self.snapshots_rec[self.snap_id_rec] = self.depre.copy()
+      self.snap_id_rec -= 1
 
   def image_condition(self, epsilon=1e-9):
+   #dt_array = np.diff(self.snap_times, prepend=self.snap_times[0])
+   #dt_array = dt_array * self.c.dt
+   #
+   # for i in range(self.nsnaps):
+   #     self.image += dt_array[i] * (
+   #         self.snapshots_src[i] * self.snapshots_rec[i]
+   #     )
+
     scale = self.snap_ratio * self.c.dt
 
     prod = self.snapshots_src * self.snapshots_rec

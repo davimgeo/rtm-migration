@@ -2,9 +2,9 @@ Runtime Full: 81.2951 seconds
 Runtime 80 snaps: 9.0981 seconds
 
 > trocar "semana passada" do slide ✅
-> melhorar lógica de alinhamento de snapshots
+> retirar lógica linspace dos snapshots, voltar a utilizar if t % snap_ratio == 0 and t >= tlag
 > adicionar que utilizo o número de nyquist para os snap_num
-> adicionar imagens com novo snap_num
+> adicionar imagens no slide com novo snap_num
 > migrar com o modelo suavizado, utilizar sismograma gerado do modelo sem suavização (diferença modelo observado/calculado)
 > testar com o marmousi
 > reproduzir paper luo2011(reproduzir o modelo vermelho azul, fazer vários modelos parecidos(mudar parametros) e migrá-los, depois fazer norma l2)
