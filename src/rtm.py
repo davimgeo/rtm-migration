@@ -34,7 +34,12 @@ class Migration:
     self.arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
 
     self.snap_ratio = int(self.c.nt / self.c.snap_num)
-    self.nsnaps = self.c.nt // self.snap_ratio
+
+    self.snap_times = np.arange(0, self.c.nt, self.snap_ratio)
+    self.snap_times = self.snap_times[self.snap_times >= 500]
+    self.snap_set = set(self.snap_times)
+
+    self.nsnaps = len(self.snap_times)
 
     self.snapshots_src = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
     self.snapshots_rec = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
@@ -44,7 +49,6 @@ class Migration:
 
     self.ix, self.iz = 0, 0
 
-    # snapshot indices
     self.snap_id_src = 0
     self.snap_id_rec = self.nsnaps - 1
 
@@ -59,11 +63,11 @@ class Migration:
       for t in range(1, self.c.nt - 1):
 
         self.foward_propagation(t)
-
         self.register_seismogram(t)
 
-        if self.c.snap_bool and not t % self.snap_ratio:
-          self.get_src_snaps()
+        if self.c.snap_bool and t in self.snap_set:
+          self.snapshots_src[self.snap_id_src] = self.upre
+          self.snap_id_src += 1
 
       if not self.c.load_residual:
         self.seis.remove_direct_wave(self.ix, self.iz)
@@ -71,11 +75,11 @@ class Migration:
       for t in range(self.c.nt - 2, 500, -1):
 
         self.inject_residual(t)
-
         self.backward_propagation()
 
-        if self.c.snap_bool and not t % self.snap_ratio:
-          self.get_rc_snaps()
+        if self.c.snap_bool and t in self.snap_set:
+          self.snapshots_rec[self.snap_id_rec] = self.depre
+          self.snap_id_rec -= 1
 
       self.image_condition()
 
@@ -119,10 +123,6 @@ class Migration:
       rx = int(self.geom.recx[irec]) + self.c.nb
       rz = int(self.geom.recz[irec]) + self.c.nb
       self.seis.seismogram[t, irec] = self.upre[rz, rx]
-
-  def get_src_snaps(self):
-    self.snapshots_src[self.snap_id_src] = self.upas
-    self.snap_id_src += 1
 
   def inject_residual(self, t):
     for irec in range(self.geom.nrec):
@@ -187,13 +187,13 @@ class Migration:
           axis=0
       )
 
-    elif id == 5:
-      # I_5
-      w = 1 / (self.snapshots_src ** 2 + epsilon)
-
+    elif id == 4:
+      # I_4
       self.image += scale * np.sum(
-        (prod) / (self.snapshots_src ** 2 + w*(epsilon**2)),
-        axis=0
+        (prod) /
+        (self.snapshots_src * self.snapshots_src
+          + epsilon),
+          axis=0
       )
 
     elif id == 6:
@@ -202,30 +202,19 @@ class Migration:
         (prod) /
         (np.sqrt(
           self.snapshots_src * self.snapshots_src
-          ) + epsilon ** 2),
+          ) + epsilon),
           axis=0
       )
 
-    elif id == 7:
-      # I_4
-      mask = prod > 0.0
-      self.image += scale * np.sum(
-        (prod * mask) /
-        (np.sqrt(
-          self.snapshots_src * self.snapshots_src * mask
-          ) + epsilon ** 2),
-          axis=0
-      )
-
-    save = 0
+    save = 1
     if save:
       export_bin(self.image[
             self.c.nb:self.c.nb + self.c.nz,
             self.c.nb:self.c.nb + self.c.nx
-        ], OUTPUT_PATH, width=self.c.nx, height=self.c.nz, name="image_700snaps.bin"
+        ], OUTPUT_PATH, width=self.c.nx, height=self.c.nz, name=f"image_{self.c.snap_num}snaps.bin"
         )
       
-      print(f"Sucessfuly saved {OUTPUT_PATH + "image_700snaps.bin"}")
+      print(f"Sucessfuly saved {OUTPUT_PATH + f"image_{self.c.snap_num}snaps.bin"}")
 
   def auto_correlation(self, A):
     return np.sum(A * A, axis=0)

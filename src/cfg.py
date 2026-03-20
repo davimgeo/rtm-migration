@@ -41,7 +41,8 @@ class Parameters:
 
   fmax = 0
   
-  snap_path = ""
+  snap_num_nyquist = False
+
   snap_num  = 0
   snap_bool = False
 

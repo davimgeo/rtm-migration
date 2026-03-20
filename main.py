@@ -21,8 +21,8 @@ def main():
   mig = Migration(model, geom, seis, cfg)
   mig.get_ricker()
   mig.set_damper()
-  mig.rtm()
-  mig.laplacian_filter()
+  mig.rtm()  
+  #mig.laplacian_filter()
 
   return mig, model
 

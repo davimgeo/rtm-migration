@@ -15,8 +15,10 @@ image_full = np.fromfile(
     count=nx*nz
 ).reshape([nz, nx], order='F')
 
+nsnaps = 251
+
 image_700snaps = np.fromfile(
-    OUTPUT_PATH + "image_700snaps.bin_200x100.bin", dtype=np.float32,
+    OUTPUT_PATH + f"image_{nsnaps}snaps.bin_200x100.bin", dtype=np.float32,
     count=nx*nz
 ).reshape([nz, nx], order='F')
 
@@ -33,7 +35,7 @@ axs[0].set_title("Image Full")
 plt.colorbar(im0, ax=axs[0])
 
 im1 = axs[1].imshow(image_700snaps, aspect='auto', cmap="Greys", vmin=vmin, vmax=vmax)
-axs[1].set_title("Image 700 Snaps")
+axs[1].set_title(f"Image {nsnaps} Snaps")
 plt.colorbar(im1, ax=axs[1])
 
 im2 = axs[2].imshow(diff_norm, aspect='auto', cmap="Greys")
@@ -49,7 +51,7 @@ plt.show()
 runtime_full = 81.2951
 runtime_700 = 10.5836
 
-plt.bar(["Full", "700 snaps"], [runtime_full, runtime_700])
+plt.bar(["Full", f"{nsnaps} snaps"], [runtime_full, runtime_700])
 
 plt.suptitle(f"Percentual Difference: {((runtime_full - runtime_700) / runtime_full * 100):.2f}%")
 plt.title("Runtime Comparison")

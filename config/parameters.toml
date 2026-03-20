@@ -47,9 +47,9 @@ tlag = 0.3
 
 # Snapshots
 
-snap_path = "data/snapshots/"
+snap_num_nyquist = true # not working rn
 
-snap_num  = 700
+snap_num  = 251
 snap_bool = true
 
 
