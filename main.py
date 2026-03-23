@@ -4,34 +4,44 @@ PATH = "config/parameters.toml"
 
 @measure_runtime
 def main():
-  cfg = Config(PATH).load()
+  config = Config(PATH).load()
 
-  geom = Geometry(cfg)
+  geom = Geometry(config)
   geom.get()
 
-  model = Model(cfg, geom)
+  model = Model(config, geom)
   model.get()
-  #model.model_gaussian_smooth(sigma=3)
   model.set_boundary()
+  model.gaussian_smooth(sigma=3)
 
-  seis = Seismogram(geom, cfg)
-  if cfg.load_residual:
-    seis.load_residual()
+  wavelet = Wavelet(config)
+  wavelet.get_ricker()
 
-  mig = Migration(model, geom, seis, cfg)
-  mig.get_ricker()
-  mig.set_damper()
-  mig.rtm()  
-  #mig.laplacian_filter()
+  seis = Seismogram(geom, config)
+  if config.load_residual:
+    seis.load()
 
-  return mig, model
+  modeling = Modeling(
+    config, model, geom, seis, wavelet
+  )
+  modeling.set_damper()
+
+  migration = Migration(
+    model, geom, seis, 
+    config, wavelet, modeling
+  )
+  migration.rtm()  
+  migration.laplacian_filter()
+
+  return migration, model
 
 if __name__ == "__main__":
-  mig, model = main()
+  migration, model = main()
 
-  #mig.plot_snapshots()
   model.plot_model_and_geometry()
-  mig.plot_image()
+  migration.plot_snapshots(migration.snapshots_src)
+  #migration.plot_snapshots(migration.snapshots_rec)
+  migration.plot_image()
 
 
 

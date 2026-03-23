@@ -9,33 +9,45 @@ from numba import njit, prange
 OUTPUT_PATH = "data/output/"
 
 class Migration:
-  def __init__(self, model: Model, geom: Geometry, seis: Seismogram, c):
+  def __init__(
+    self, model: Model, geom: Geometry, 
+    seis: Seismogram, c, wl: Wavelet,
+    mod: Modeling
+  ) -> None:
+    
     self.mdl = model
     self.geom = geom
     self.seis = seis
+    self.wl = wl
+    self.mod = mod
     self.c = c
-
-    self.damp2D = np.ones((self.mdl.nzz, self.mdl.nxx))
-
-    self.ricker = np.zeros(self.c.nt)
 
     self.upas = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.upre = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.ufut = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
+    self.d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+
     self.depas = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.depre = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.defut = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
-    self.d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
-
     self.dh2 = self.c.dh * self.c.dh
-    self.arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
+    self.arg = (
+        self.c.dt * self.c.dt
+        * self.mdl.model_smooth
+        * self.mdl.model_smooth
+    )
 
-    self.snap_ratio = int(self.c.nt / self.c.snap_num)
+    self.tstop = int(self.c.tlag / self.c.dt)
 
-    self.snap_times = np.linspace(500, self.c.nt - 2, self.c.snap_num)
+    if self.c.snap_num_nyquist:
+      self.snap_ratio = 2.0 * int(1 / 2*self.c.fmax*self.c.dt)
+    else:
+      self.snap_ratio = int(self.c.nt / self.c.snap_num)
+
+    self.snap_times = np.linspace(500, self.c.nt - 1, self.c.snap_num)
     self.snap_times = np.unique(self.snap_times.astype(int))
 
     self.nsnaps = len(self.snap_times)
@@ -57,22 +69,23 @@ class Migration:
 
       self.zero_out_matrices()
 
-      self.ix = int(self.geom.srcxId[isrc]) + self.c.nb
-      self.iz = int(self.geom.srczId[isrc]) + self.c.nb
+      self.define_source_coordinates(isrc)
+
+      self.mod.fd_kernel(self.ix, self.iz)
 
       for t in range(1, self.c.nt - 1):
 
         self.foward_propagation(t)
-        self.register_seismogram(t)
 
         self.get_src_snaps(t)
 
       if not self.c.load_residual:
         self.seis.remove_direct_wave(self.ix, self.iz)
 
-      for t in range(self.c.nt - 2, 500, -1):
+      for t in range(self.c.nt - 1, self.tstop, -1):
 
-        self.inject_residual(t)
+        self.inject_dobs(t)
+
         self.get_rc_snaps(t)
 
         self.backward_propagation()
@@ -93,8 +106,12 @@ class Migration:
     self.snap_id_src = 0
     self.snap_id_rec = self.nsnaps - 1
 
-  def foward_propagation(self, t):
-    self.upre[self.iz, self.ix] += self.ricker[t] / self.dh2
+  def define_source_coordinates(self, isrc: int):
+    self.ix = int(self.geom.srcxId[isrc]) + self.c.nb
+    self.iz = int(self.geom.srczId[isrc]) + self.c.nb
+
+  def foward_propagation(self, t: int):
+    self.upre[self.iz, self.ix] += self.wl.ricker[t] / self.dh2
 
     lap = laplacian2d(
       self.upre,
@@ -111,25 +128,19 @@ class Migration:
       - self.ufut
     )
 
-    self.ufut = self.upre * self.damp2D
-    self.upre = self.upas * self.damp2D
+    self.ufut = self.upre * self.mod.damp2D
+    self.upre = self.upas * self.mod.damp2D
 
-  def register_seismogram(self, t):
-    for irec in range(self.geom.nrec):
-      rx = int(self.geom.recx[irec]) + self.c.nb
-      rz = int(self.geom.recz[irec]) + self.c.nb
-      self.seis.seismogram[t, irec] = self.upre[rz, rx]
-
-  def get_src_snaps(self, t):
+  def get_src_snaps(self, t: int):
     if self.c.snap_bool and t in self.snap_set:
       self.snapshots_src[self.snap_id_src] = self.upre.copy()
       self.snap_id_src += 1
 
-  def inject_residual(self, t):
+  def inject_dobs(self, t: int):
     for irec in range(self.geom.nrec):
       rx = int(self.geom.recx[irec]) + self.c.nb
       rz = int(self.geom.recz[irec]) + self.c.nb
-      self.depre[rz, rx] += self.seis.residual[t, irec] / self.dh2
+      self.depre[rz, rx] += self.seis.seismogram[t, irec] / self.dh2
 
   def backward_propagation(self):
     lap = laplacian2d(
@@ -147,28 +158,28 @@ class Migration:
       - self.defut
     )
 
-    self.defut = self.depre * self.damp2D
-    self.depre = self.depas * self.damp2D
+    self.defut = self.depre * self.mod.damp2D
+    self.depre = self.depas * self.mod.damp2D
 
-  def get_rc_snaps(self, t):
+  def get_rc_snaps(self, t: int):
     if self.c.snap_bool and t in self.snap_set:
       self.snapshots_rec[self.snap_id_rec] = self.depre.copy()
       self.snap_id_rec -= 1
 
   def image_condition(self, epsilon=1e-9):
-   #dt_array = np.diff(self.snap_times, prepend=self.snap_times[0])
-   #dt_array = dt_array * self.c.dt
-   #
-   # for i in range(self.nsnaps):
-   #     self.image += dt_array[i] * (
-   #         self.snapshots_src[i] * self.snapshots_rec[i]
-   #     )
+    dt_array = np.diff(self.snap_times, prepend=self.snap_times[0])
+    dt_array = dt_array * self.c.dt
+   
+    for i in range(self.nsnaps):
+      self.image += dt_array[i] * (
+        self.snapshots_src[i] * self.snapshots_rec[i]
+      )
 
     scale = self.snap_ratio * self.c.dt
 
     prod = self.snapshots_src * self.snapshots_rec
 
-    id = 0
+    id = 10
     if id == 0:
       # I_0
       self.image += scale * np.sum(
@@ -191,8 +202,8 @@ class Migration:
       self.image += scale * np.sum(
           (prod) /
           (np.sqrt(
-              self.auto_correlation(self.snapshots_src) *
-              self.auto_correlation(self.snapshots_rec)
+              self.__auto_correlation(self.snapshots_src) *
+              self.__auto_correlation(self.snapshots_rec)
           ) + epsilon),
           axis=0
       )
@@ -207,7 +218,7 @@ class Migration:
       )
 
     elif id == 6:
-      # I_4
+      # I_6
       self.image += scale * np.sum(
         (prod) /
         (np.sqrt(
@@ -215,41 +226,18 @@ class Migration:
           ) + epsilon),
           axis=0
       )
-
-    save = 1
+    save = 0
     if save:
       export_bin(self.image[
-            self.c.nb:self.c.nb + self.c.nz,
-            self.c.nb:self.c.nb + self.c.nx
+          self.c.nb:self.c.nb + self.c.nz,
+          self.c.nb:self.c.nb + self.c.nx
         ], OUTPUT_PATH, width=self.c.nx, height=self.c.nz, name=f"image_{self.c.snap_num}snaps.bin"
-        )
-      
+      )
+        
       print(f"Sucessfuly saved {OUTPUT_PATH + f"image_{self.c.snap_num}snaps.bin"}")
 
-  def auto_correlation(self, A):
+  def __auto_correlation(self, A):
     return np.sum(A * A, axis=0)
-
-  def get_ricker(self):
-    fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
-    t = np.arange(self.c.nt) * self.c.dt - self.c.tlag
-
-    arg = np.pi * (t * fc * np.pi) ** 2.0 
-
-    self.ricker = (1.0 - 2.0 * arg) * np.exp(-arg)
-
-  def set_damper(self):
-    damp1D = np.zeros(self.c.nb)
-
-    for i in range(self.c.nb):
-      damp1D[i] = np.exp(-(self.c.factor*(self.c.nb - i))**2.0)
-
-    for i in range(self.mdl.nzz):
-      self.damp2D[i,:self.c.nb] *= damp1D
-      self.damp2D[i,-self.c.nb:] *= damp1D[::-1]
-
-    for j in range(self.mdl.nxx):
-      self.damp2D[:self.c.nb,j] *= damp1D
-      self.damp2D[-self.c.nb:,j] *= damp1D[::-1]
 
   def laplacian_filter(self):
     inv_dh = 1.0 / (12.0 * self.c.dh * self.c.dh)
@@ -276,7 +264,7 @@ class Migration:
 
     self.image = self.gradient
 
-  def plot_snapshots(self):
+  def plot_snapshots(self, snapshots: np.ndarray) -> None:
     xloc = np.linspace(0, self.c.nx-1, 11, dtype=int)
     xlab = np.array(xloc * self.c.dh, dtype=int)
 
@@ -286,7 +274,7 @@ class Migration:
     fig, ax = plt.subplots(figsize=(12, 5))
 
     ims = []
-    for snap in self.snapshots_src:
+    for snap in snapshots:
       scale = 2.0 * np.std(snap)
 
       model_frame = ax.imshow(
@@ -323,7 +311,7 @@ class Migration:
     plt.show()
     return ani
 
-  def plot_image(self, perc=99):
+  def plot_image(self, perc=99) -> None:
       xloc = np.linspace(0, self.c.nx - 1, 11, dtype=int)
       xlab = np.array(xloc * self.c.dh, dtype=int)
 
@@ -360,28 +348,108 @@ class Migration:
       plt.colorbar(img, ax=ax)
       plt.show()
 
+class Modeling:
+  def __init__(
+      self, c, mdl: Model, geom: Geometry,
+      seis: Seismogram, wl: Wavelet
+    ) -> None:
+
+    self.c = c
+    self.seis = seis
+    self.mdl = mdl
+    self.geom = geom
+    self.wl = wl
+
+    self.upas = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.upre = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.ufut = np.zeros((self.mdl.nzz, self.mdl.nxx))
+
+    self.d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+
+    self.dh2 = self.c.dh * self.c.dh
+    self.arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
+
+    self.damp2D = np.ones((self.mdl.nzz, self.mdl.nxx))
+
+  def fd_kernel(self, ix: int, iz: int) -> None:
+      for t in range(1, self.c.nt - 1):
+
+        self.upre[iz, ix] += self.wl.ricker[t] / self.dh2
+
+        lap = laplacian2d(
+          self.upre,
+          self.d2u_dx2,
+          self.d2u_dz2,
+          self.mdl.nzz,
+          self.mdl.nxx,
+          self.dh2
+        )
+
+        self.upas = (
+          self.arg * lap
+          + 2.0 * self.upre
+          - self.ufut
+        )
+
+        self.ufut = self.upre * self.damp2D
+        self.upre = self.upas * self.damp2D
+
+        for irec in range(self.geom.nrec):
+          rx = int(self.geom.recx[irec]) + self.c.nb
+          rz = int(self.geom.recz[irec]) + self.c.nb
+          self.seis.seismogram[t, irec] = self.upre[rz, rx]
+
+      self.upas.fill(0.0)
+      self.upre.fill(0.0)
+      self.ufut.fill(0.0)
+
+  def set_damper(self):
+    damp1D = np.zeros(self.c.nb)
+
+    for i in range(self.c.nb):
+      damp1D[i] = np.exp(-(self.c.factor*(self.c.nb - i))**2.0)
+
+    for i in range(self.mdl.nzz):
+      self.damp2D[i,:self.c.nb] *= damp1D
+      self.damp2D[i,-self.c.nb:] *= damp1D[::-1]
+
+    for j in range(self.mdl.nxx):
+      self.damp2D[:self.c.nb,j] *= damp1D
+      self.damp2D[-self.c.nb:,j] *= damp1D[::-1]
+
+class Wavelet:
+  def __init__(self, c):
+    self.c = c
+
+    self.ricker = np.zeros(self.c.nt)
+
+  def get_ricker(self):
+    fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
+    t = np.arange(self.c.nt) * self.c.dt - self.c.tlag
+
+    arg = np.pi * (t * fc * np.pi) ** 2.0 
+
+    self.ricker = (1.0 - 2.0 * arg) * np.exp(-arg)
+
 class Seismogram:
   def __init__(self, geom, c):
     self.geom = geom
     self.c = c
 
-    self.residual = np.zeros((self.c.nt, self.geom.nrec))
-
     self.seismogram = np.zeros((self.c.nt, self.geom.nrec))
 
     self.direct_wave = np.array([])
 
-  def load_residual(self, input_path):
+  def load(self, input_path):
     path = input_path
 
-    self.residual = np.fromfile(
+    self.seismogram = np.fromfile(
         path, dtype=np.float32, count=self.c.nt*self.geom.nrec
         ).reshape([self.c.nt, self.geom.nrec], order='F')
 
   def remove_direct_wave(self, ix, iz, epsilon=0.09):
-      self.residual = self.seismogram.copy()
-
-      nt = self.residual.shape[0]
+      nt = self.seismogram.shape[0]
 
       rx = self.geom.recx + self.c.nb
       rz = self.geom.recz + self.c.nb
@@ -408,9 +476,12 @@ class Seismogram:
 
         mask = (samples >= imin) & (samples <= imax)
 
-        self.residual[mask, j] = 0.0
+        self.seismogram[mask, j] = 0.0
 
-  def plot(self, seismogram):
+  def plot(self, seismogram=None):
+    if seismogram is None:
+      seismogram = self.seismogram
+
     tloc = np.linspace(0, self.c.nt - 1, 11, dtype=int)
     tlab = np.around(tloc * self.c.dt, decimals=1)
 
@@ -454,8 +525,9 @@ class Model:
     self.nzz = 2*self.c.nb + self.c.nz
 
     self.model = np.zeros((self.c.nz, self.c.nx))
+    self.model_smooth = np.zeros((self.c.nz, self.c.nx))
 
-  def get(self):
+  def get(self) -> None:
     if self.c.load_model:
       self.load()
     else:
@@ -495,7 +567,17 @@ class Model:
 
     self.model = model_ext
 
-  def model_gaussian_smooth(self, sigma: float, truncate: float = 4.0) -> None:
+  def gaussian_smooth(self, sigma: float, truncate: float = 4.0):
+    self.model_smooth = self.__gaussian_filter(
+      self.model, sigma=sigma, truncate=truncate
+    )
+
+  def __gaussian_filter(
+      self, arr: np.ndarray, 
+      sigma: float, 
+      truncate: float
+    ) -> np.ndarray:
+      
       radius = int(truncate * sigma + 0.5)
 
       x = np.arange(-radius, radius + 1)
@@ -503,14 +585,16 @@ class Model:
 
       gaussian /= gaussian.sum()
 
-      for col in range(self.c.nx):
-        data = self.model[:, col]
+      for col in range(arr.shape[1]):
+        data = arr[:, col]
 
         padded = np.pad(data, radius, mode="reflect")
 
         smoothed = np.convolve(padded, gaussian, mode="same")
 
-        self.model[:, col] = smoothed[radius:-radius]
+        arr[:, col] = smoothed[radius:-radius]
+      
+      return arr
 
   def plot_model_and_geometry(self):
       xloc = np.linspace(0, self.c.nx - 1, 11, dtype=int)
