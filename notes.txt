@@ -12,3 +12,4 @@ fazer vários modelos parecidos(mudar parametros) e migrá-los, depois fazer nor
 > adicionar imagens no slide com novo snap_num
 > testar com o marmousi
 > add debug mode
+> add colorbar in seismogram plot
