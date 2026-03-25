@@ -297,7 +297,7 @@ class Migration:
 
     ani = animation.ArtistAnimation(
       fig, ims,
-      interval=(self.c.nt / len(self.snapshots_src) + 1) * self.c.dt * 1e3,
+      interval=(self.c.nt / len(snapshots) + 1) * self.c.dt * 1e3,
       blit=False,
       repeat_delay=0
     )
@@ -572,7 +572,7 @@ class Model:
 
   def gaussian_smooth(self, sigma: float, truncate: float = 4.0):
     self.model_smooth = self.__gaussian_filter(
-      self.model, sigma=sigma, truncate=truncate
+      self.model.copy(), sigma=sigma, truncate=truncate
     )
 
   def __gaussian_filter(
@@ -599,7 +599,10 @@ class Model:
       
       return arr
 
-  def plot_model_and_geometry(self):
+  def plot_model_and_geometry(self, model=None):
+      if model is None:
+        model = self.model
+
       xloc = np.linspace(0, self.c.nx - 1, 11, dtype=int)
       xlab = np.array(xloc * self.c.dh, dtype=int)
 
@@ -609,7 +612,7 @@ class Model:
       fig, ax = plt.subplots(figsize=(12, 5))
 
       img = ax.imshow(
-          self.model[
+          model[
               self.c.nb:self.c.nb + self.c.nz,
               self.c.nb:self.c.nb + self.c.nx
           ],

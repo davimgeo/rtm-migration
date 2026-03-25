@@ -4,12 +4,13 @@ Runtime 251 snaps: 9.0981 seconds
 TODO:
 
 > trocar "semana passada" do slide ✅
-> migrar com o modelo suavizado, utilizar sismograma gerado do modelo sem suavização (diferença modelo observado/calculado) ✅
+> migrar com o modelo suavizado, utilizar sismograma gerado do modelo 
+sem suavização (diferença modelo observado/calculado) ✅
+> adicionar imagens no slide com novo snap_num ✅
+> add colorbar in seismogram plot ✅
 > reproduzir paper luo2011(reproduzir o modelo vermelho azul, 
 fazer vários modelos parecidos(mudar parametros) e migrá-los, depois fazer norma l2)
 > retirar lógica linspace dos snapshots, voltar a utilizar if t % snap_ratio == 0 and t >= tlag
 > adicionar que utilizo o número de nyquist para os snap_num
-> adicionar imagens no slide com novo snap_num
 > testar com o marmousi
 > add debug mode
-> add colorbar in seismogram plot
