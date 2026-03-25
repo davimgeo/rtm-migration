@@ -39,7 +39,7 @@ if __name__ == "__main__":
   migration, model = main()
 
   model.plot_model_and_geometry()
-  migration.plot_snapshots(migration.snapshots_src)
+  #migration.plot_snapshots(migration.snapshots_src)
   #migration.plot_snapshots(migration.snapshots_rec)
   migration.plot_image()
 

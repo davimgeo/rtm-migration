@@ -505,6 +505,9 @@ class Seismogram:
     except:
       pass
 
+    cbar = plt.colorbar(img, ax=ax)
+    cbar.set_label("Amplitude", fontsize=13)
+
     ax.set_yticks(tloc)
     ax.set_yticklabels(tlab)
 

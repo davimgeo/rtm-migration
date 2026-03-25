@@ -17,8 +17,8 @@ load_model = false
 
 model_path = "data/input/models/model_difractor_200x100.bin"
 
-value_interfaces = [1500, 2000, 2500]
-interfaces = [50, 70]
+value_interfaces = [1500, 2000]
+interfaces = [50]
 
 nx = 200
 nz = 100

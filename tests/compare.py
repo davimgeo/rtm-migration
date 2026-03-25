@@ -49,8 +49,8 @@ plt.suptitle(f"Relative Error: {rel_error * 100:.2f}%")
 plt.tight_layout()
 plt.show()
 
-runtime_full = 81.2951
-runtime_700 = 10.5836
+runtime_full = 110.3154
+runtime_700 = 13.762
 
 plt.bar(["Full", f"{nsnaps} snaps"], [runtime_full, runtime_700])
 

@@ -1,76 +1,48 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def create_circle(model, r: int, value, center: tuple):
-  nx, nz = model.shape
+def create_circle(model, r, center, value):
+  nz, nx = model.shape
+  x0, y0 = center
 
-  mask = np.zeros((nx, nz))
+  z, x = np.ogrid[:nz, :nx]
+  dist = np.sqrt((z - x0)**2 + (x - y0)**2)
+  mask_corona = dist <= r
+  mask = dist <= r - 5
 
-  for i in range(nx):
-    for j in range(nz):
-      mask[i, j] = value * (
-        (i - center[0])**2 + (j - center[1])**2 <= r**2
-      )
+  model[mask_corona] = value - 500
+  model[mask] = value
 
-  return model * mask
-   
-def gaussian_filter_polar(
-  arr: np.ndarray, 
-  sigma: float, 
-  truncate: float,
-) -> np.ndarray:
-      
-  radius = int(truncate * sigma + 0.5)
+  return model
 
-  theta = np.arange(-radius, radius + 1)
-  gaussian = np.exp(-0.5 * (theta**2) / (sigma**2))
+def smooth_circle(model, center, radius):
+    nz, nx = model.shape
+    x0, y0 = center
 
-  gaussian /= gaussian.sum()
+    z, x = np.ogrid[:nz, :nx]
+    dist = np.sqrt((z - x0)**2 + (x - y0)**2)
 
-  result = arr.copy()
+    smooth = np.clip(1 - dist / radius, 0, 1)
 
-  for col in range(arr.shape[1]):
-    _, r_data = cartesian2polar(arr[:, col])
-
-    padded = np.pad(r_data, radius, mode="reflect")
-
-    smoothed = np.convolve(padded, gaussian, mode="same")
-
-    result[:, col] = smoothed[radius:-radius]
-      
-  return result
-
-def cartesian2polar(arr, plot=0):
-  x = np.arange(len(arr))
-  y = arr
-
-  r = np.sqrt(x**2 + y**2)
-  theta = np.arctan2(y, x)
-
-
-  if plot:
-    fig, ax = plt.subplots(
-          subplot_kw={'projection': 'polar'},
-          figsize=(5, 8),
-          layout='constrained'
-    )
-    ax.plot(theta, r)
-
-    plt.show()
-
-  return theta, r
+    return smooth
 
 nz, nx = 300, 900
 
-model = np.full((nz, nx), 1500.0)
+center = (nz//2,nx//2)
+
+r = 75
+
+model = np.full((nz, nx), 2500.0)
 model = create_circle(
-  model, r=75, value=2000.0, center=(nz//2, nx//2)
+  model, r, center, value=3500.0
 )
-#model = gaussian_filter_polar(model, sigma=10, truncate=4)
+model_smooth = smooth_circle(model, center, radius=r)
 
-plt.imshow(model)
+fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+
+ax.imshow(model_smooth)
+
 plt.show()
-
 
 
 
