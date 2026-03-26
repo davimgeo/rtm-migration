@@ -478,6 +478,23 @@ class Seismogram:
 
         self.seismogram[mask, j] = 0.0
 
+  def apply_agc(self, time_window : float):
+      sliding_window = int(time_window / self.c.dt) + 1
+
+      for i in range(self.geom.nrec):
+        trace = self.seismogram[:, i]
+        l, h = 0, sliding_window - 1
+        mid = (l + h) // 2
+
+        while h < self.c.nt - 1:
+          window_samples = trace[l:h]
+          mean_amplitude = np.mean(np.abs(window_samples))
+          trace[mid] /= mean_amplitude + 1e-6
+
+          l, h, mid = l + 1, h + 1, mid + 1
+
+        self.seismogram[:,i] = trace
+
   def plot(self, seismogram=None):
     if seismogram is None:
       seismogram = self.seismogram

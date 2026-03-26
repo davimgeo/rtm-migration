@@ -31,7 +31,7 @@ def main():
     config, wavelet, modeling
   )
   migration.rtm()  
-  migration.laplacian_filter()
+  #migration.laplacian_filter()
 
   return migration, model
 

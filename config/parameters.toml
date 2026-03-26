@@ -30,7 +30,7 @@ factor = 0.0015
 
 # Seismogram
 
-perc = 95
+perc = 99
 
 load_residual = false
 
