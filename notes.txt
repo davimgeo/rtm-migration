@@ -10,3 +10,9 @@ TODO:
 > retirar lógica linspace dos snapshots, voltar a utilizar if t % snap_ratio == 0 and t >= tlag
 > testar com o marmousi
 > add debug mode
+
+numba TODO:
+
+> use float32
+> manual index calculation
+> loop order

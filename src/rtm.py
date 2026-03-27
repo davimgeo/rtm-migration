@@ -35,6 +35,7 @@ class Migration:
     self.defut = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
     self.dh2 = self.c.dh * self.c.dh
+    self.inv_dh2 = 1.0 / (5040.0 * self.dh2)
     self.arg = (
         self.c.dt * self.c.dt
         * self.mdl.model_smooth
@@ -73,7 +74,6 @@ class Migration:
       self.define_source_coordinates(isrc)
 
       self.mod.fd(self.ix, self.iz)
-      #self.seis.plot()
 
       for t in range(1, self.c.nt - 1):
 
@@ -86,12 +86,10 @@ class Migration:
 
       for t in range(self.c.nt - 1, self.tstop, -1):
 
-        self.inject_dobs(t)
-
         self.get_rc_snaps(t)
 
-        self.backward_propagation()
-        
+        self.backward_propagation(t)
+
       self.image_condition()
 
   def zero_out_matrices(self):
@@ -113,44 +111,45 @@ class Migration:
     self.iz = int(self.geom.srczId[isrc]) + self.c.nb
 
   def forward_propagation(self, t: int):
-    _forward_kernel(
-      self.upre,
-      self.upas,
-      self.ufut,
-      self.laplacian,
-      self.wl.ricker,
-      t,
-      self.iz,
-      self.ix,
-      self.dh2,
-      self.arg,
-      self.mod.damp2D,
-      self.mdl.nzz,
-      self.mdl.nxx
-    )
+      _forward_kernel(
+        self.upas,
+        self.upre,
+        self.ufut,
+        self.mod.damp_x,
+        self.mod.damp_z,
+        self.inv_dh2,
+        self.mdl.nzz,
+        self.mdl.nxx,
+        self.wl.ricker,
+        self.ix,
+        self.iz,
+        self.dh2,
+        self.arg,
+        t,
+      )
 
   def get_src_snaps(self, t: int):
     if self.c.snap_bool and t in self.snap_set:
       self.snapshots_src[self.snap_id_src] = self.upre.copy()
       self.snap_id_src += 1
 
-  def inject_dobs(self, t: int):
-    for irec in range(self.geom.nrec):
-      rx = int(self.geom.recx[irec]) + self.c.nb
-      rz = int(self.geom.recz[irec]) + self.c.nb
-      self.depre[rz, rx] += self.seis.seismogram[t, irec] / self.dh2
-
-  def backward_propagation(self):
+  def backward_propagation(self, t: int):
     _backward_kernel(
-      self.depre,
       self.depas,
+      self.depre,
       self.defut,
-      self.laplacian,
+      self.mod.damp_x,
+      self.mod.damp_z,
+      self.inv_dh2,
+      self.mdl.nzz,
+      self.mdl.nxx,
       self.dh2,
       self.arg,
-      self.mod.damp2D,
-      self.mdl.nzz,
-      self.mdl.nxx
+      self.geom.recx,
+      self.geom.recz,
+      self.c.nb,
+      self.seis.seismogram,
+      t
     )
 
   def get_rc_snaps(self, t: int):
@@ -359,30 +358,42 @@ class Modeling:
     self.laplacian = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
     self.dh2 = self.c.dh * self.c.dh
+    self.inv_dh2 = 1.0 / (5040.0 * self.dh2)
     self.arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
 
-    self.damp2D = np.ones((self.mdl.nzz, self.mdl.nxx))
+    self.damp_x = np.zeros((self.mdl.nxx))
+    self.damp_z = np.zeros((self.mdl.nzz))
+
+    self.ix, self.iz = 0, 0
 
   def fd(self, ix: int, iz: int) -> None:
+      self.ix, self.iz = ix, iz
+
       for t in range(1, self.c.nt - 1):
 
         _forward_kernel(
-          self.upre,
           self.upas,
+          self.upre,
           self.ufut,
-          self.laplacian,
+          self.damp_x,
+          self.damp_z,
+          self.inv_dh2,
+          self.mdl.nzz,
+          self.mdl.nxx,
           self.wl.ricker,
-          t,
-          iz,
-          ix,
+          self.ix,
+          self.iz,
           self.dh2,
           self.arg,
-          self.damp2D,
-          self.mdl.nzz,
-          self.mdl.nxx
+          t,
         )
 
-        for irec in range(self.geom.nrec):
+        #global uncalled
+        #if uncalled:
+        #  _forward_kernel.parallel_diagnostics(level=4)
+        #  uncalled = False
+
+        for irec in range(len(self.geom.recx)):
           rx = int(self.geom.recx[irec]) + self.c.nb
           rz = int(self.geom.recz[irec]) + self.c.nb
           self.seis.seismogram[t, irec] = self.upre[rz, rx]
@@ -391,19 +402,32 @@ class Modeling:
       self.upre.fill(0.0)
       self.ufut.fill(0.0)
 
-  def set_damper(self):
-    damp1D = np.zeros(self.c.nb)
-
-    for i in range(self.c.nb):
-      damp1D[i] = np.exp(-(self.c.factor*(self.c.nb - i))**2.0)
-
+  def get_damp(self):
     for i in range(self.mdl.nzz):
-      self.damp2D[i,:self.c.nb] *= damp1D
-      self.damp2D[i,-self.c.nb:] *= damp1D[::-1]
+
+      if self.c.nb <= i < self.c.nb + self.mdl.nzz:
+        self.damp_z[i] = 1.0
+
+      elif i < self.c.nb:
+        d = self.c.nb - i
+        self.damp_z[i] = np.exp(-(self.c.factor * d) * (self.c.factor * d))
+
+      else:
+        d = i - (self.c.nb + self.mdl.nzz - 1)
+        self.damp_z[i] = np.exp(-(self.c.factor * d) * (self.c.factor * d))
 
     for j in range(self.mdl.nxx):
-      self.damp2D[:self.c.nb,j] *= damp1D
-      self.damp2D[-self.c.nb:,j] *= damp1D[::-1]
+
+      if self.c.nb <= j < self.c.nb + self.mdl.nxx:
+        self.damp_x[j] = 1.0
+
+      elif j < self.c.nb:
+        d = self.c.nb - j
+        self.damp_x[j] = np.exp(-(self.c.factor * d) * (self.c.factor * d))
+
+      else:
+        d = j - (self.c.nb + self.c.nx - 1)
+        self.damp_x[j] = np.exp(-(self.c.factor * d) * (self.c.factor * d))
 
 class Wavelet:
   def __init__(self, c):
@@ -695,60 +719,25 @@ class Geometry:
           header="recId, recx, recz",
       )
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def _forward_kernel(
-  upre: np.ndarray, 
-  upas: np.ndarray, 
+  upas: np.ndarray,
+  upre: np.ndarray,
   ufut: np.ndarray,
-  laplacian: np.ndarray,
-  ricker: np.array, 
-  t: int,
-  iz: int, 
+  damp_x: np.ndarray,
+  damp_z: np.ndarray,
+  inv_dh2: float,
+  nzz: int,
+  nxx: int,
+  ricker: np.ndarray,
   ix: int,
-  dh2: int, 
+  iz: int,
+  dh2: float,
   arg: np.ndarray,
-  damp2D: np.ndarray,
-  nzz: int, 
-  nxx: int
-) -> np.ndarray:
+  t: int,
+) -> None:
+
   upre[iz, ix] += ricker[t] / dh2
-
-  laplacian = laplacian2d(upre, laplacian, nzz, nxx, dh2)
-
-  upas[:, :] = arg * laplacian + 2.0 * upre - ufut
-
-  ufut[:, :] = upre * damp2D
-  upre[:, :] = upas * damp2D
-
-@njit(parallel=True)
-def _backward_kernel(
-  depre: np.ndarray, 
-  depas: np.ndarray, 
-  defut: np.ndarray,
-  laplacian: np.ndarray,
-  dh2: int, 
-  arg: np.ndarray,
-  damp2D: np.ndarray,
-  nzz: int, 
-  nxx: int
-) -> np.ndarray:
-  
-  laplacian = laplacian2d(depre, laplacian, nzz, nxx, dh2)
-
-  depas[:, :] = arg * laplacian + 2.0 * depre - defut
-
-  defut[:, :] = depre * damp2D
-  depre[:, :] = depas * damp2D
-
-@njit(parallel=True)
-def laplacian2d(
-  upre: np.ndarray, 
-  laplacian: np.ndarray, 
-  nzz: int, 
-  nxx: int, 
-  dh2: int
-) -> np.ndarray:
-  inv_dh2 = 1.0 / (5040.0 * dh2)
 
   for i in prange(4, nzz - 4):
     for j in range(4, nxx - 4):
@@ -764,9 +753,61 @@ def laplacian2d(
         1008.0 * upre[i, j+2] + 128.0   * upre[i, j+3] - 9.0    * upre[i, j+4]
       )
 
-      laplacian[i, j] = (d2u_dx2 + d2u_dz2) * inv_dh2
+      laplacian = (d2u_dx2 + d2u_dz2) * inv_dh2
 
-  return laplacian
+      upas[i, j] = arg[i, j] * laplacian + 2.0 * upre[i, j] - ufut[i, j]
+      
+      damp = damp_x[j] * damp_z[i]
+
+      ufut[i, j] = upre[i, j] * damp
+      upre[i, j] = upas[i, j] * damp
+
+@njit(parallel=True, fastmath=True)
+def _backward_kernel(
+  depas: np.ndarray,
+  depre: np.ndarray,
+  defut: np.ndarray,
+  damp_x: np.ndarray,
+  damp_z: np.ndarray,
+  inv_dh2: float,
+  nzz: int,
+  nxx: int,
+  dh2: float,
+  arg: np.ndarray,
+  recx: np.ndarray,
+  recz: np.ndarray,
+  nb: int,
+  seismogram: np.ndarray,
+  t: int,
+) -> None:
+
+  for irec in range(len(recx)):
+    rx = int(recx[irec]) + nb
+    rz = int(recz[irec]) + nb
+    depre[rz, rx] += seismogram[t, irec] * inv_dh2
+
+  for i in prange(4, nzz - 4):
+    for j in range(4, nxx - 4):
+      d2u_dx2 = (
+        -9.0   * depre[i-4, j] + 128.0   * depre[i-3, j] - 1008.0 * depre[i-2, j] +
+        8064.0 * depre[i-1, j] - 14350.0 * depre[i,   j] + 8064.0 * depre[i+1, j] -
+        1008.0 * depre[i+2, j] + 128.0   * depre[i+3, j] - 9.0    * depre[i+4, j]
+      )
+
+      d2u_dz2 = (
+        -9.0   * depre[i, j-4] + 128.0   * depre[i, j-3] - 1008.0 * depre[i, j-2] +
+        8064.0 * depre[i, j-1] - 14350.0 * depre[i, j]   + 8064.0 * depre[i, j+1] -
+        1008.0 * depre[i, j+2] + 128.0   * depre[i, j+3] - 9.0    * depre[i, j+4]
+      )
+
+      laplacian = (d2u_dx2 + d2u_dz2) * inv_dh2
+
+      depas[i, i] = arg[i, j] * laplacian + 2.0 * depre[i, j] - defut[i, j]
+
+      damp = damp_x[j] * damp_z[i]
+
+      defut[i, j] = depre[i, j] * damp
+      depre[i, j] = depas[i, j] * damp
 
 def measure_runtime(func):
   def wrapper(*args, **kwargs):

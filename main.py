@@ -24,7 +24,7 @@ def main():
   modeling = Modeling(
     config, model, geom, seis, wavelet
   )
-  modeling.set_damper()
+  modeling.get_damp()
 
   migration = Migration(
     model, geom, seis, 
