@@ -4,12 +4,14 @@ debug = true
 
 # Geometry
 
-create_geom = false
+create_geom = true
 
 receivers = "data/input/geometry/receivers.txt"
 sources = "data/input/geometry/sources.txt" 
 
 offset = 5 # [m]
+
+rec_depth = 0 # [m]
 
 # Model
 
@@ -26,24 +28,24 @@ nz = 100
 dh = 10.0
 
 nb     = 100
-factor = 0.0015
+factor = 0.004
 
 # Seismogram
 
-perc = 99
+perc = 95
 
 load_residual = false
 
 residual_input_path = "data/input/residuals/seismogram_nt2001_dt0.001_nrec40.bin"
 save_seismogram = true
 
-nt = 2001
-dt = 1.0e-3
+nt = 8001
+dt = 0.0005
 
 # Wavelet
 
 fmax = 30.0
-tlag = 0.3
+tlag = 0.15
 
 # Snapshots
 

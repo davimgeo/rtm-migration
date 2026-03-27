@@ -8,6 +8,8 @@ from numba import njit, prange
 
 OUTPUT_PATH = "data/output/"
 
+uncalled = True
+
 class Migration:
   def __init__(
     self, model: Model, geom: Geometry, 
@@ -26,8 +28,7 @@ class Migration:
     self.upre = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.ufut = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
-    self.d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.laplacian = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
     self.depas = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.depre = np.zeros((self.mdl.nzz, self.mdl.nxx))
@@ -71,11 +72,12 @@ class Migration:
 
       self.define_source_coordinates(isrc)
 
-      self.mod.fd_kernel(self.ix, self.iz)
+      self.mod.fd(self.ix, self.iz)
+      #self.seis.plot()
 
       for t in range(1, self.c.nt - 1):
 
-        self.foward_propagation(t)
+        self.forward_propagation(t)
 
         self.get_src_snaps(t)
 
@@ -110,26 +112,22 @@ class Migration:
     self.ix = int(self.geom.srcxId[isrc]) + self.c.nb
     self.iz = int(self.geom.srczId[isrc]) + self.c.nb
 
-  def foward_propagation(self, t: int):
-    self.upre[self.iz, self.ix] += self.wl.ricker[t] / self.dh2
-
-    lap = laplacian2d(
+  def forward_propagation(self, t: int):
+    _forward_kernel(
       self.upre,
-      self.d2u_dx2,
-      self.d2u_dz2,
+      self.upas,
+      self.ufut,
+      self.laplacian,
+      self.wl.ricker,
+      t,
+      self.iz,
+      self.ix,
+      self.dh2,
+      self.arg,
+      self.mod.damp2D,
       self.mdl.nzz,
-      self.mdl.nxx,
-      self.dh2
+      self.mdl.nxx
     )
-
-    self.upas = (
-      self.arg * lap
-      + 2.0 * self.upre
-      - self.ufut
-    )
-
-    self.ufut = self.upre * self.mod.damp2D
-    self.upre = self.upas * self.mod.damp2D
 
   def get_src_snaps(self, t: int):
     if self.c.snap_bool and t in self.snap_set:
@@ -143,23 +141,17 @@ class Migration:
       self.depre[rz, rx] += self.seis.seismogram[t, irec] / self.dh2
 
   def backward_propagation(self):
-    lap = laplacian2d(
+    _backward_kernel(
       self.depre,
-      self.d2u_dx2,
-      self.d2u_dz2,
+      self.depas,
+      self.defut,
+      self.laplacian,
+      self.dh2,
+      self.arg,
+      self.mod.damp2D,
       self.mdl.nzz,
-      self.mdl.nxx,
-      self.dh2
+      self.mdl.nxx
     )
-
-    self.depas = (
-      self.arg * lap
-      + 2.0 * self.depre
-      - self.defut
-    )
-
-    self.defut = self.depre * self.mod.damp2D
-    self.depre = self.depas * self.mod.damp2D
 
   def get_rc_snaps(self, t: int):
     if self.c.snap_bool and t in self.snap_set:
@@ -364,36 +356,31 @@ class Modeling:
     self.upre = np.zeros((self.mdl.nzz, self.mdl.nxx))
     self.ufut = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
-    self.d2u_dx2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.d2u_dz2 = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.laplacian = np.zeros((self.mdl.nzz, self.mdl.nxx))
 
     self.dh2 = self.c.dh * self.c.dh
     self.arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
 
     self.damp2D = np.ones((self.mdl.nzz, self.mdl.nxx))
 
-  def fd_kernel(self, ix: int, iz: int) -> None:
+  def fd(self, ix: int, iz: int) -> None:
       for t in range(1, self.c.nt - 1):
 
-        self.upre[iz, ix] += self.wl.ricker[t] / self.dh2
-
-        lap = laplacian2d(
+        _forward_kernel(
           self.upre,
-          self.d2u_dx2,
-          self.d2u_dz2,
+          self.upas,
+          self.ufut,
+          self.laplacian,
+          self.wl.ricker,
+          t,
+          iz,
+          ix,
+          self.dh2,
+          self.arg,
+          self.damp2D,
           self.mdl.nzz,
-          self.mdl.nxx,
-          self.dh2
+          self.mdl.nxx
         )
-
-        self.upas = (
-          self.arg * lap
-          + 2.0 * self.upre
-          - self.ufut
-        )
-
-        self.ufut = self.upre * self.damp2D
-        self.upre = self.upas * self.damp2D
 
         for irec in range(self.geom.nrec):
           rx = int(self.geom.recx[irec]) + self.c.nb
@@ -666,6 +653,7 @@ class Geometry:
   def get(self):
     if self.c.create_geom:
       self.create()
+      self.load()
     else:
       self.load()
 
@@ -694,10 +682,10 @@ class Geometry:
       self.nrec = int(self.c.nx / self.c.offset)
 
       recId = np.arange(1, self.nrec + 1)
-      self.recx = np.arange(0, self.nrec) * self.c.offset * self.c.dh
+      self.recx = np.arange(0, self.nrec) * self.c.offset
       self.recz = np.full(self.nrec, self.c.rec_depth)
 
-      data = np.column_stack((recId, self.recx, self.recz))
+      data = np.column_stack((recId, self.recx * self.c.dh, self.recz))
 
       np.savetxt(
           "data\\input\\geometry\\receivers.txt",
@@ -708,27 +696,77 @@ class Geometry:
       )
 
 @njit(parallel=True)
+def _forward_kernel(
+  upre: np.ndarray, 
+  upas: np.ndarray, 
+  ufut: np.ndarray,
+  laplacian: np.ndarray,
+  ricker: np.array, 
+  t: int,
+  iz: int, 
+  ix: int,
+  dh2: int, 
+  arg: np.ndarray,
+  damp2D: np.ndarray,
+  nzz: int, 
+  nxx: int
+) -> np.ndarray:
+  upre[iz, ix] += ricker[t] / dh2
+
+  laplacian = laplacian2d(upre, laplacian, nzz, nxx, dh2)
+
+  upas[:, :] = arg * laplacian + 2.0 * upre - ufut
+
+  ufut[:, :] = upre * damp2D
+  upre[:, :] = upas * damp2D
+
+@njit(parallel=True)
+def _backward_kernel(
+  depre: np.ndarray, 
+  depas: np.ndarray, 
+  defut: np.ndarray,
+  laplacian: np.ndarray,
+  dh2: int, 
+  arg: np.ndarray,
+  damp2D: np.ndarray,
+  nzz: int, 
+  nxx: int
+) -> np.ndarray:
+  
+  laplacian = laplacian2d(depre, laplacian, nzz, nxx, dh2)
+
+  depas[:, :] = arg * laplacian + 2.0 * depre - defut
+
+  defut[:, :] = depre * damp2D
+  depre[:, :] = depas * damp2D
+
+@njit(parallel=True)
 def laplacian2d(
-    upre, d2u_dx2, d2u_dz2, 
-    nzz, nxx, dh2,
-) -> None:
+  upre: np.ndarray, 
+  laplacian: np.ndarray, 
+  nzz: int, 
+  nxx: int, 
+  dh2: int
+) -> np.ndarray:
   inv_dh2 = 1.0 / (5040.0 * dh2)
 
   for i in prange(4, nzz - 4):
     for j in range(4, nxx - 4):
-      d2u_dx2[i, j] = (
-          -9   * upre[i-4, j] + 128   * upre[i-3, j] - 1008 * upre[i-2, j] +
-          8064 * upre[i-1, j] - 14350 * upre[i,   j] + 8064 * upre[i+1, j] -
-          1008 * upre[i+2, j] + 128   * upre[i+3, j] - 9    * upre[i+4, j]
-      ) * inv_dh2
+      d2u_dx2 = (
+        -9.0   * upre[i-4, j] + 128.0   * upre[i-3, j] - 1008.0 * upre[i-2, j] +
+        8064.0 * upre[i-1, j] - 14350.0 * upre[i,   j] + 8064.0 * upre[i+1, j] -
+        1008.0 * upre[i+2, j] + 128.0   * upre[i+3, j] - 9.0    * upre[i+4, j]
+      )
 
-      d2u_dz2[i, j] = (
-          -9   * upre[i, j-4] + 128   * upre[i, j-3] - 1008 * upre[i, j-2] +
-          8064 * upre[i, j-1] - 14350 * upre[i, j]   + 8064 * upre[i, j+1] -
-          1008 * upre[i, j+2] + 128   * upre[i, j+3] - 9    * upre[i, j+4]
-      ) * inv_dh2
+      d2u_dz2 = (
+        -9.0   * upre[i, j-4] + 128.0   * upre[i, j-3] - 1008.0 * upre[i, j-2] +
+        8064.0 * upre[i, j-1] - 14350.0 * upre[i, j]   + 8064.0 * upre[i, j+1] -
+        1008.0 * upre[i, j+2] + 128.0   * upre[i, j+3] - 9.0    * upre[i, j+4]
+      )
 
-  return d2u_dx2 + d2u_dz2
+      laplacian[i, j] = (d2u_dx2 + d2u_dz2) * inv_dh2
+
+  return laplacian
 
 def measure_runtime(func):
   def wrapper(*args, **kwargs):
@@ -744,26 +782,3 @@ def export_bin(
     a: np.array, path: str, width: int, height: int, name: str
   ):
   a.flatten('F').astype('float32', order='F').tofile(path + f"{name}_{width}x{height}.bin")
-
-#self.transit_time = np.zeros((self.mdl.nzz, self.mdl.nxx))
-#self.ref = np.zeros((self.mdl.nzz, self.mdl.nxx))
-
-#@njit(parallel=True)
-#def update_tt(
-#    upre: np.ndarray,
-#    ref: np.ndarray,
-#    transit_time: np.ndarray,
-#    current_time: float,
-#    nzz: int,
-#    nxx: int,
-#) -> None:
-#  for i in prange(4, nzz - 4):
-#    for j in range(4, nxx - 4):
-      # Criterio da Amplitude Maxima - Andre Bulcao
-      # if abs(u(Ω,t)) >= abs(ref(Ω)) then
-      # ref(Ω) = u(Ω,t)
-      # T(Ω) = t
-      # endif
-#      if abs(upre[i,j]) >= abs(ref[i,j]):
-#          ref[i,j] = upre[i,j]
-#          transit_time[i,j] = current_time

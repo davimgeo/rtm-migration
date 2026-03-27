@@ -10,6 +10,7 @@ class Parameters:
   receivers = ""
   sources = ""
   offset = 0.0
+  rec_depth = 0.0
 
   load_model = False
 
