@@ -1,5 +1,5 @@
-Runtime Full: 81.2951 seconds
-Runtime 251 snaps: 9.0981 seconds
+Runtime Float64: 29.98s
+Runtime Float32
 
 TODO:
 

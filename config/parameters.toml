@@ -28,7 +28,7 @@ nz = 100
 dh = 10.0
 
 nb     = 100
-factor = 0.004
+factor = 0.0015
 
 # Seismogram
 
