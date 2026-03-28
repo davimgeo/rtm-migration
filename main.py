@@ -18,8 +18,6 @@ def main():
   wavelet.get_ricker()
 
   seis = Seismogram(geom, config)
-  if config.load_residual:
-    seis.load()
 
   modeling = Modeling(
     config, model, geom, seis, wavelet
@@ -41,7 +39,7 @@ if __name__ == "__main__":
   model.plot_model_and_geometry(model.model_smooth)
   #migration.plot_snapshots(migration.snapshots_src)
   #migration.plot_snapshots(migration.snapshots_rec)
-  migration.plot_image()
+  migration.plot(gradient=True)
 
 
 

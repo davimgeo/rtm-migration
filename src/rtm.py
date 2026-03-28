@@ -24,35 +24,30 @@ class Migration:
     self.mod = mod
     self.c = c
 
-    self.upas = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.upre = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.ufut = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    shape = (self.mdl.nzz, self.mdl.nxx)
 
-    self.laplacian = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.upas = np.zeros(shape)
+    self.upre = np.zeros(shape)
+    self.ufut = np.zeros(shape)
 
-    self.depas = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.depre = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.defut = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.laplacian = np.zeros(shape)
 
-    self.laplacian = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.depas = np.zeros(shape)
+    self.depre = np.zeros(shape)
+    self.defut = np.zeros(shape)
 
     self.dh2 = self.c.dh * self.c.dh
     self.inv_dh2 = 1.0 / (5040.0 * self.dh2)
-    self.arg = (
-        self.c.dt * self.c.dt
-        * self.mdl.model_smooth
-        * self.mdl.model_smooth
-    )
+    self.arg = self.c.dt**2 * self.mdl.model_smooth**2
 
-
-    self.tstop = int(self.c.tlag / self.c.dt)
+    self.tstop = int(1.7 * (self.c.tlag / self.c.dt))
 
     if self.c.snap_num_nyquist:
-      self.snap_ratio = 2.0 * int(1 / 2*self.c.fmax*self.c.dt)
+      self.snap_ratio = 2.0 * int(1 / (2 * self.c.fmax * self.c.dt))
     else:
       self.snap_ratio = int(self.c.nt / self.c.snap_num)
 
-    self.snap_times = np.linspace(500, self.c.nt - 1, self.c.snap_num)
+    self.snap_times = np.linspace(self.tstop, self.c.nt - 1, self.c.snap_num)
     self.snap_times = np.unique(self.snap_times.astype(int))
 
     self.nsnaps = len(self.snap_times)
@@ -61,8 +56,8 @@ class Migration:
     self.snapshots_src = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
     self.snapshots_rec = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
 
-    self.image = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.gradient = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.image = np.zeros(shape)
+    self.gradient = np.zeros(shape)
 
     self.ix, self.iz = 0, 0
 
@@ -78,15 +73,13 @@ class Migration:
       self.define_source_coordinates(isrc)
 
       self.mod.fd(self.ix, self.iz)
+      self.seis.remove_direct_wave(self.ix, self.iz)
 
       for t in range(1, self.c.nt - 1):
 
         self.forward_propagation(t)
 
         self.get_src_snaps(t)
-
-      if not self.c.load_residual:
-        self.seis.remove_direct_wave(self.ix, self.iz)
 
       for t in range(self.c.nt - 1, self.tstop, -1):
 
@@ -95,6 +88,9 @@ class Migration:
         self.backward_propagation(t)
 
       self.image_condition()
+
+    if self.c.save_image:
+      self.save()
 
   def zero_out_matrices(self):
     self.seis.seismogram.fill(0.0)
@@ -134,7 +130,7 @@ class Migration:
       )
 
   def get_src_snaps(self, t: int):
-    if self.c.snap_bool and t in self.snap_set:
+    if t in self.snap_set:
       self.snapshots_src[self.snap_id_src] = self.upre.copy()
       self.snap_id_src += 1
 
@@ -159,82 +155,31 @@ class Migration:
     )
 
   def get_rc_snaps(self, t: int):
-    if self.c.snap_bool and t in self.snap_set:
+    if t in self.snap_set:
       self.snapshots_rec[self.snap_id_rec] = self.depre.copy()
       self.snap_id_rec -= 1
 
   def image_condition(self, epsilon=1e-9):
     dt_array = np.diff(self.snap_times, prepend=self.snap_times[0])
     dt_array = dt_array * self.c.dt
-   
-    for i in range(self.nsnaps):
-      self.image += dt_array[i] * (
-        self.snapshots_src[i] * self.snapshots_rec[i]
-      )
+
+    # for i in range(self.nsnaps):
+    #   self.image += dt_array[i] * (
+    #     self.snapshots_src[i] * self.snapshots_rec[i]
+    #   )
 
     scale = self.snap_ratio * self.c.dt
+    #print(dt_array)
+    #print(self.snap_ratio * self.c.dt)
 
     prod = self.snapshots_src * self.snapshots_rec
 
-    id = 10
-    if id == 0:
-      # I_0
-      self.image += scale * np.sum(
-        prod,
+    self.image += scale * np.sum(
+      (prod) /
+      np.sum(self.snapshots_src * self.snapshots_src)
+        + epsilon,
         axis=0
-      )
-
-    elif id == 1:
-      # I_1
-      mask = prod > 0.0
-      self.image += scale * np.sum(prod * mask, axis=0)  
-
-    elif id == 2:
-      # I_2
-      mask = prod < 0.0
-      self.image += scale * np.sum(prod * mask, axis=0)
-
-    elif id == 3:
-      # I_3
-      self.image += scale * np.sum(
-          (prod) /
-          (np.sqrt(
-              self.__auto_correlation(self.snapshots_src) *
-              self.__auto_correlation(self.snapshots_rec)
-          ) + epsilon),
-          axis=0
-      )
-
-    elif id == 4:
-      # I_4
-      self.image += scale * np.sum(
-        (prod) /
-        (self.snapshots_src * self.snapshots_src
-          + epsilon),
-          axis=0
-      )
-
-    elif id == 6:
-      # I_6
-      self.image += scale * np.sum(
-        (prod) /
-        (np.sqrt(
-          self.snapshots_src * self.snapshots_src
-          ) + epsilon),
-          axis=0
-      )
-    save = 0
-    if save:
-      export_bin(self.image[
-          self.c.nb:self.c.nb + self.c.nz,
-          self.c.nb:self.c.nb + self.c.nx
-        ], OUTPUT_PATH, width=self.c.nx, height=self.c.nz, name=f"image_{self.c.snap_num}snaps.bin"
-      )
-        
-      print(f"Sucessfuly saved {OUTPUT_PATH + f"image_{self.c.snap_num}snaps.bin"}")
-
-  def __auto_correlation(self, A):
-    return np.sum(A * A, axis=0)
+    )
 
   def laplacian_filter(self):
     inv_dh = 1.0 / (12.0 * self.c.dh * self.c.dh)
@@ -261,6 +206,26 @@ class Migration:
 
     self.image = self.gradient
 
+  def save(self, path=None):
+    if path is None:
+      path = (
+        OUTPUT_PATH +
+          f"image_{self.nsnaps}snaps" +
+          f"_{self.c.nx}x{self.c.nz}.bin"
+      )
+
+    cropped = self.image[
+      self.c.nb:self.c.nb + self.c.nz,
+      self.c.nb:self.c.nb + self.c.nx
+    ]
+
+    try:
+      cropped.flatten('F').astype('float32', order='F').tofile(path)
+      print(f"Successfully saved: {path}")
+
+    except OSError as e:
+      raise OSError(f"Could not save file: {path}") from e
+    
   def plot_snapshots(self, snapshots: np.ndarray) -> None:
     xloc = np.linspace(0, self.c.nx-1, 11, dtype=int)
     xlab = np.array(xloc * self.c.dh, dtype=int)
@@ -308,42 +273,49 @@ class Migration:
     plt.show()
     return ani
 
-  def plot_image(self, perc=99) -> None:
-      xloc = np.linspace(0, self.c.nx - 1, 11, dtype=int)
-      xlab = np.array(xloc * self.c.dh, dtype=int)
+  def plot(self, gradient=False, perc=99) -> None:
+    if gradient:
+      image = self.gradient
+      label = "Image Gradient"
+    else:
+      image = self.image
+      label = "Image"
 
-      zloc = np.linspace(0, self.c.nz - 1, 7, dtype=int)
-      zlab = np.array(zloc * self.c.dh, dtype=int)
+    xloc = np.linspace(0, self.c.nx - 1, 11, dtype=int)
+    xlab = np.array(xloc * self.c.dh, dtype=int)
 
-      fig, ax = plt.subplots(figsize=(12, 5))
+    zloc = np.linspace(0, self.c.nz - 1, 7, dtype=int)
+    zlab = np.array(zloc * self.c.dh, dtype=int)
 
-      img_data = self.image[
-          self.c.nb:self.c.nb + self.c.nz,
-          self.c.nb:self.c.nb + self.c.nx
-      ]
+    _, ax = plt.subplots(figsize=(12, 5))
 
-      vmin = np.percentile(img_data, 100 - perc)
-      vmax = np.percentile(img_data, perc)
+    img_data = image[
+      self.c.nb:self.c.nb + self.c.nz,
+      self.c.nb:self.c.nb + self.c.nx
+    ]
 
-      img = ax.imshow(
-          img_data,
-          aspect="auto",
-          cmap="Greys",
-          vmin=vmin,
-          vmax=vmax
-      )
+    vmin = np.percentile(img_data, 100 - perc)
+    vmax = np.percentile(img_data, perc)
 
-      ax.set_xticks(xloc)
-      ax.set_xticklabels(xlab)
-      ax.set_yticks(zloc)
-      ax.set_yticklabels(zlab)
+    img = ax.imshow(
+      img_data,
+      aspect="auto",
+      cmap="Greys",
+      vmin=vmin,
+      vmax=vmax
+    )
 
-      ax.set_xlabel("Distance [m]")
-      ax.set_ylabel("Depth [m]")
-      ax.set_title("Image")
+    ax.set_xticks(xloc)
+    ax.set_xticklabels(xlab)
+    ax.set_yticks(zloc)
+    ax.set_yticklabels(zlab)
 
-      plt.colorbar(img, ax=ax)
-      plt.show()
+    ax.set_xlabel("Distance [m]")
+    ax.set_ylabel("Depth [m]")
+    ax.set_title(label)
+
+    plt.colorbar(img, ax=ax)
+    plt.show()
 
 class Modeling:
   def __init__(
@@ -357,15 +329,17 @@ class Modeling:
     self.geom = geom
     self.wl = wl
 
-    self.upas = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.upre = np.zeros((self.mdl.nzz, self.mdl.nxx))
-    self.ufut = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    shape = (self.mdl.nzz, self.mdl.nxx)
 
-    self.laplacian = np.zeros((self.mdl.nzz, self.mdl.nxx))
+    self.upas = np.zeros(shape)
+    self.upre = np.zeros(shape)
+    self.ufut = np.zeros(shape)
+
+    self.laplacian = np.zeros(shape)
 
     self.dh2 = self.c.dh * self.c.dh
     self.inv_dh2 = 1.0 / (5040.0 * self.dh2)
-    self.arg = self.c.dt * self.c.dt * self.mdl.model * self.mdl.model
+    self.arg = self.c.dt **2 * self.mdl.model**2
 
     self.damp_x = np.zeros((self.mdl.nxx))
     self.damp_z = np.zeros((self.mdl.nzz))
@@ -460,10 +434,14 @@ class Seismogram:
 
     self.seismogram = np.zeros((self.c.nt, self.geom.nrec))
 
+    if self.c.seismogram_mode.upper() == "LOAD":
+      self.load()
+
     self.direct_wave = np.array([])
 
-  def load(self, input_path):
-    path = input_path
+  def load(self, input_path=None):
+    if input_path is None:
+      path = self.c.load_seis_path
 
     self.seismogram = np.fromfile(
         path, dtype=np.float32, count=self.c.nt*self.geom.nrec
@@ -569,10 +547,13 @@ class Model:
     self.model_smooth = np.zeros((self.c.nz, self.c.nx))
 
   def get(self) -> None:
-    if self.c.load_model:
+    mode = self.c.model_mode.upper()
+    if mode == "LOAD":
       self.load()
-    else:
+    elif mode == "CREATE":
       self.create()
+    else:
+      raise KeyError("Choose a valid mode. (create, load)")
 
   def load(self) -> None:
     self.model = np.fromfile(
@@ -685,11 +666,14 @@ class Geometry:
     self.nrec = 0
 
   def get(self):
-    if self.c.create_geom:
+    mode = self.c.geometry_mode.upper()
+    if mode == "LOAD":
+      self.load()
+    elif mode == "CREATE":
       self.create()
       self.load()
     else:
-      self.load()
+      raise KeyError("Choose a valid mode. (create, load)")
 
   def load(self) -> None:
     receivers = np.loadtxt(self.c.receivers, delimiter=',', skiprows=1)
@@ -836,7 +820,3 @@ def measure_runtime(func):
 
   return wrapper
 
-def export_bin(
-    a: np.array, path: str, width: int, height: int, name: str
-  ):
-  a.flatten('F').astype('float32', order='F').tofile(path + f"{name}_{width}x{height}.bin")

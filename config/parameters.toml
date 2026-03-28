@@ -1,58 +1,64 @@
-# General Parameters #
+# ------------------------- General -------------------------
+[General]
+debug = false
 
-debug = true
+# --------------------------- RTM ---------------------------
+[RTM]
+save = false
 
-# Geometry
-
-create_geom = true
-
-receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources.txt" 
-
-offset = 5 # [m]
-
-rec_depth = 0 # [m]
-
-# Model
-
-load_model = false
-
-model_path = "data/input/models/model_difractor_200x100.bin"
-
-value_interfaces = [1500, 2000]
-interfaces = [50]
-
-nx = 200
-nz = 100
-
+# ------------------------ Modeling -------------------------
+[Modeling]
 dh = 10.0
 
-nb     = 100
+[Modeling.Cerjan]
+nb = 100
 factor = 0.0015
 
-# Seismogram
+# ----------------------- Seismogram ------------------------
+[Seismogram]
+mode = "generate" # Keys: generate/load
 
-perc = 95
+[Seismogram.load]
+path = ""
 
-load_residual = false
-
-residual_input_path = "data/input/residuals/seismogram_nt2001_dt0.001_nrec40.bin"
-save_seismogram = true
-
+[Seismogram.parameters]
 nt = 8001
 dt = 0.0005
 
-# Wavelet
+[Seismogram.plot]
+perc = 95
 
+# -------------------------- Model --------------------------
+[Model]
+mode = "create" # Keys: create/load
+
+[Model.load]
+path = "data/input/models/"
+
+[Model.create]
+nx = 200
+nz = 100
+interfaces = [50]
+layerValues = [1500, 2000]
+
+# ------------------------- Geometry ------------------------
+[Geometry]
+mode = "load" # Keys: create/load
+
+[Geometry.load]
+receivers = "data/input/geometry/receivers.txt"
+sources = "data/input/geometry/sources.txt"
+
+[Geometry.create]
+offset = 5
+receiversDepth = 0
+
+# ------------------------- Wavelet -------------------------
+[Wavelet]
 fmax = 30.0
 tlag = 0.15
 
-# Snapshots
-
-snap_num_nyquist = true
-
-snap_num  = 251
-snap_bool = true
-
-
-
+# ------------------------ Snapshots ------------------------
+[Snapshots]
+numNyquist = false
+number = 251
