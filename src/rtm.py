@@ -57,14 +57,8 @@ class Migration:
     else:
       self.snap_ratio = int(self.c.nt / self.c.snap_num)
 
-    self.snap_times = np.linspace(self.tstop, self.c.nt - 1, self.c.snap_num)
-    self.snap_times = np.unique(self.snap_times.astype(int))
-
-    self.nsnaps = len(self.snap_times)
-    self.snap_set = set(self.snap_times)
-
-    self.dt_array = np.diff(self.snap_times, prepend=self.snap_times[0])
-    self.dt_array = self.dt_array * self.c.dt
+    self.nsnaps = int((self.c.nt - self.tstop - 1) / (self.snap_ratio)) + 1
+    self.dt_snaps = self.snap_ratio * self.c.dt
 
     self.snapshots_src = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
     self.snapshots_rec = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
@@ -73,9 +67,12 @@ class Migration:
     self.gradient = np.zeros(shape)
 
     self.ix, self.iz = 0, 0
+    self.num, self.den = np.zeros(shape), np.zeros(shape)
 
     self.snap_id_src = 0
     self.snap_id_rec = self.nsnaps - 1
+
+    self.energy = np.zeros(self.c.nt)
 
   def rtm(self):
 
@@ -91,16 +88,23 @@ class Migration:
 
         self.forward_propagation(t)
 
+        self.energy[t] = np.sum(self.upre * self.upre)
+
         self.get_src_snaps(t)
 
       for t in range(self.c.nt - 1, self.tstop, -1):
 
         self.backward_propagation(t)
 
-        self.image_condition(t)
+        self.accumulate_cross_correlation(t)
+
+      self.image_condition()
 
     if self.c.save_image:
       self.save()
+
+    plt.loglog(np.arange(self.c.nt), self.energy)
+    plt.show()
 
   def zero_out_matrices(self):
     self.seis.seismogram.fill(0.0)
@@ -115,6 +119,9 @@ class Migration:
 
     self.snap_id_src = 0
     self.snap_id_rec = self.nsnaps - 1
+
+    self.num.fill(0.0)
+    self.den.fill(0.0)
 
   def define_source_coordinates(self, isrc: int):
     self.ix = int(self.geom.srcxId[isrc]) + self.c.nb
@@ -132,7 +139,7 @@ class Migration:
       )
 
   def get_src_snaps(self, t: int):
-    if t in self.snap_set:
+    if t >= self.tstop and not t % self.snap_ratio:
       self.snapshots_src[self.snap_id_src] = self.upre.copy()
       self.snap_id_src += 1
 
@@ -145,17 +152,40 @@ class Migration:
       self.seis.seismogram, t
     )
 
-  def image_condition(self, t: int, epsilon=1e-9):
-    if t in self.snap_set:
+  def accumulate_cross_correlation(self, t: int, epsilon=1e-9):
+    if t % self.snap_ratio:
       idx = int((t - self.tstop) / self.snap_ratio)
 
-      self.image += self.dt_array[idx] * (
-        (self.snapshots_src[idx] * self.depre) /
-        (np.sum(self.snapshots_src[idx] * self.snapshots_src[idx]) + epsilon)
-      )
+      src = self.snapshots_src[idx]
+      rec = self.depre
 
-  def get_rc_snaps(self, t: int):
-    if t in self.snap_set:
+      self.num += src * rec
+
+  def image_condition(self):
+    self.image += self.dt_snaps * self.num
+
+  def __image_condition2(self, epsilon=1e-9):
+    src = self.snapshots_src
+    rec = self.snapshots_rec
+
+    id = 1
+    if id == 0:
+      numerator = src * rec
+      denominator = (src * src)
+
+      self.image += np.sum(
+        numerator / (np.sum(denominator, axis=0) + epsilon),
+        axis=0
+      )
+    elif id == 1:
+      numerator = src * rec
+
+      self.image += self.dt_snaps * np.sum(
+        numerator, axis=0
+      )   
+
+  def __get_rc_snaps(self, t: int):
+    if not t % self.snap_ratio:
       self.snapshots_rec[self.snap_id_rec] = self.depre.copy()
       self.snap_id_rec -= 1
 

@@ -3,14 +3,15 @@ Runtime Float32
 
 TODO:
 
-> Depois de fazer vários smooth_circles com diferentes sigmas, fazer gráfico (delta_sigma, função objetivo) ✅
+> Depois de fazer vários smooth_circles com diferentes sigmas, fazer gráfico 
+(delta_sigma, função objetivo) ✅
 > Fazer gráfico 3D (delta_sigma, delta_amplitude, função objetivo) ✅
 > make it easier to export images ✅
+> retirar lógica linspace dos snapshots, voltar a utilizar if t % snap_ratio == 0 and t >= tlag ✅
+> no plot_image, ter opção para gradiente e separar imagem do gradiente ✅
 > adicionar check de dispersão numérica / instabilidade
-> retirar lógica linspace dos snapshots, voltar a utilizar if t % snap_ratio == 0 and t >= tlag
 > testar com o marmousi
 > mover plots para outra classe
-> no plot_image, ter opção para gradiente e separar imagem do gradiente
 > add debug mode
 
 Debug Mode Ideas:

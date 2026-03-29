@@ -10,15 +10,15 @@ OUTPUT_PATH = "data/output/"
 
 nx, nz = 200, 100
 
-nsnaps = 251
+nsnaps = 219
 
 image_full = np.fromfile(
-    OUTPUT_PATH + f"image_219snaps_200x100.bin", dtype=np.float32,
+    OUTPUT_PATH + f"image_{nsnaps}snaps_200x100_im_full.bin", dtype=np.float32,
     count=nx*nz
 ).reshape([nz, nx], order='F')
 
 image_700snaps = np.fromfile(
-    OUTPUT_PATH + f"image_{nsnaps}snaps_200x100_model.bin", dtype=np.float32,
+    OUTPUT_PATH + f"image_{nsnaps}snaps_200x100.bin", dtype=np.float32,
     count=nx*nz
 ).reshape([nz, nx], order='F')
 
@@ -48,8 +48,8 @@ plt.suptitle(f"Relative Error: {rel_error * 100:.2f}%")
 plt.tight_layout()
 plt.show()
 
-runtime_full = 110.3154
-runtime_700 = 13.762
+runtime_full = 13.7345
+runtime_700 = 22.3913
 
 plt.bar(["Full", f"{nsnaps} snaps"], [runtime_full, runtime_700])
 

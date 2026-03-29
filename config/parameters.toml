@@ -47,7 +47,7 @@ mode = "load" # Keys: create/load
 
 [Geometry.load]
 receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources.txt"
+sources = "data/input/geometry/sources4.txt"
 
 [Geometry.create]
 offset = 5
@@ -60,5 +60,5 @@ tlag = 0.15
 
 # ------------------------ Snapshots ------------------------
 [Snapshots]
-numNyquist = false
+numNyquist = true
 number = 251
