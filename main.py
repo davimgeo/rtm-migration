@@ -37,7 +37,7 @@ if __name__ == "__main__":
   migration, model = main()
 
   model.plot_model_and_geometry(model.model_smooth)
-  migration.plot_snapshots(migration.snapshots_src)
+  #migration.plot_snapshots(migration.snapshots_src)
   #migration.plot_snapshots(migration.snapshots_rec)
   migration.plot(gradient=True)
 

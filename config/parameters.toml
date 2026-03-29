@@ -60,5 +60,5 @@ tlag = 0.15
 
 # ------------------------ Snapshots ------------------------
 [Snapshots]
-numNyquist = true
+numNyquist = false
 number = 251

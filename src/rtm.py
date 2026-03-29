@@ -53,7 +53,7 @@ class Migration:
     self.tstop = int(1.7 * (self.c.tlag / self.c.dt))
 
     if self.c.snap_num_nyquist:
-      self.snap_ratio = 2.0 * int(1 / (2 * self.c.fmax * self.c.dt))
+      self.snap_ratio = int(1 / (4 * self.c.fmax * self.c.dt))
     else:
       self.snap_ratio = int(self.c.nt / self.c.snap_num)
 
@@ -122,21 +122,13 @@ class Migration:
 
   def forward_propagation(self, t: int):
       _forward_kernel(
-        self.upas,
-        self.upre,
-        self.ufut,
-        self.laplacian,
-        self.mod.damp_x,
-        self.mod.damp_z,
-        self.inv_dh2,
-        self.mdl.nzz,
-        self.mdl.nxx,
-        self.wl.ricker,
-        self.ix,
-        self.iz,
-        self.dh2,
-        self.arg,
-        t,
+        self.upas, self.upre, self.ufut,
+        self.laplacian, self.mod.damp_x,
+        self.mod.damp_z, self.inv_dh2,
+        self.mdl.nzz, self.mdl.nxx, 
+        self.wl.ricker, self.ix,
+        self.iz, self.dh2,
+        self.arg, t,
       )
 
   def get_src_snaps(self, t: int):
@@ -146,17 +138,12 @@ class Migration:
 
   def backward_propagation(self, t: int):
     _backward_kernel(
-      self.depas,  self.depre, self.defut,
+      self.depas, self.depre, self.defut,
       self.laplacian, self.mod.damp_x, self.mod.damp_z,
       self.inv_dh2, self.mdl.nzz, self.mdl.nxx, self.dh2,
       self.arg, self.geom.recx, self.geom.recz, self.c.nb,
       self.seis.seismogram, t
     )
-
-  def get_rc_snaps(self, t: int):
-    if t in self.snap_set:
-      self.snapshots_rec[self.snap_id_rec] = self.depre.copy()
-      self.snap_id_rec -= 1
 
   def image_condition(self, t: int, epsilon=1e-9):
     if t in self.snap_set:
@@ -166,6 +153,11 @@ class Migration:
         (self.snapshots_src[idx] * self.depre) /
         (np.sum(self.snapshots_src[idx] * self.snapshots_src[idx]) + epsilon)
       )
+
+  def get_rc_snaps(self, t: int):
+    if t in self.snap_set:
+      self.snapshots_rec[self.snap_id_rec] = self.depre.copy()
+      self.snap_id_rec -= 1
 
   def laplacian_filter(self):
     inv_dh = 1.0 / (12.0 * self.c.dh * self.c.dh)
