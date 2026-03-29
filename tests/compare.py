@@ -13,13 +13,12 @@ nx, nz = 200, 100
 nsnaps = 251
 
 image_full = np.fromfile(
-    OUTPUT_PATH + "image_full_200x100.bin", dtype=np.float32,
+    OUTPUT_PATH + f"image_219snaps_200x100.bin", dtype=np.float32,
     count=nx*nz
 ).reshape([nz, nx], order='F')
 
-
 image_700snaps = np.fromfile(
-    OUTPUT_PATH + f"image_{nsnaps}snaps.bin_200x100.bin", dtype=np.float32,
+    OUTPUT_PATH + f"image_{nsnaps}snaps_200x100_model.bin", dtype=np.float32,
     count=nx*nz
 ).reshape([nz, nx], order='F')
 
@@ -32,11 +31,11 @@ vmax = max(image_full.max(), image_700snaps.max())
 fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(15, 5))
 
 im0 = axs[0].imshow(image_full, aspect='auto', cmap="Greys", vmin=vmin, vmax=vmax)
-axs[0].set_title("Image Full")
+axs[0].set_title("Image Offset")
 plt.colorbar(im0, ax=axs[0])
 
 im1 = axs[1].imshow(image_700snaps, aspect='auto', cmap="Greys", vmin=vmin, vmax=vmax)
-axs[1].set_title(f"Image {nsnaps} Snaps")
+axs[1].set_title(f"Image Model")
 plt.colorbar(im1, ax=axs[1])
 
 im2 = axs[2].imshow(diff_norm, aspect='auto', cmap="Greys")

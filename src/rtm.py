@@ -10,6 +10,16 @@ OUTPUT_PATH = "data/output/"
 
 uncalled = True
 
+def measure_runtime(func):
+  def wrapper(*args, **kwargs):
+    start = time.time()
+    result = func(*args, **kwargs)
+    end = time.time()
+    print(f"Runtime: {round(end - start, 4)} seconds")
+    return result
+
+  return wrapper
+
 class Migration:
   def __init__(
     self, model: Model, geom: Geometry, 
@@ -53,6 +63,9 @@ class Migration:
     self.nsnaps = len(self.snap_times)
     self.snap_set = set(self.snap_times)
 
+    self.dt_array = np.diff(self.snap_times, prepend=self.snap_times[0])
+    self.dt_array = self.dt_array * self.c.dt
+
     self.snapshots_src = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
     self.snapshots_rec = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
 
@@ -72,8 +85,7 @@ class Migration:
 
       self.define_source_coordinates(isrc)
 
-      self.mod.fd(self.ix, self.iz)
-      self.seis.remove_direct_wave(self.ix, self.iz)
+      self.mod.remove_direct_wave_model(self.ix, self.iz)
 
       for t in range(1, self.c.nt - 1):
 
@@ -83,11 +95,9 @@ class Migration:
 
       for t in range(self.c.nt - 1, self.tstop, -1):
 
-        self.get_rc_snaps(t)
-
         self.backward_propagation(t)
 
-      self.image_condition()
+        self.image_condition(t)
 
     if self.c.save_image:
       self.save()
@@ -136,22 +146,11 @@ class Migration:
 
   def backward_propagation(self, t: int):
     _backward_kernel(
-      self.depas,
-      self.depre,
-      self.defut,
-      self.laplacian,
-      self.mod.damp_x,
-      self.mod.damp_z,
-      self.inv_dh2,
-      self.mdl.nzz,
-      self.mdl.nxx,
-      self.dh2,
-      self.arg,
-      self.geom.recx,
-      self.geom.recz,
-      self.c.nb,
-      self.seis.seismogram,
-      t
+      self.depas,  self.depre, self.defut,
+      self.laplacian, self.mod.damp_x, self.mod.damp_z,
+      self.inv_dh2, self.mdl.nzz, self.mdl.nxx, self.dh2,
+      self.arg, self.geom.recx, self.geom.recz, self.c.nb,
+      self.seis.seismogram, t
     )
 
   def get_rc_snaps(self, t: int):
@@ -159,27 +158,14 @@ class Migration:
       self.snapshots_rec[self.snap_id_rec] = self.depre.copy()
       self.snap_id_rec -= 1
 
-  def image_condition(self, epsilon=1e-9):
-    dt_array = np.diff(self.snap_times, prepend=self.snap_times[0])
-    dt_array = dt_array * self.c.dt
+  def image_condition(self, t: int, epsilon=1e-9):
+    if t in self.snap_set:
+      idx = int((t - self.tstop) / self.snap_ratio)
 
-    # for i in range(self.nsnaps):
-    #   self.image += dt_array[i] * (
-    #     self.snapshots_src[i] * self.snapshots_rec[i]
-    #   )
-
-    scale = self.snap_ratio * self.c.dt
-    #print(dt_array)
-    #print(self.snap_ratio * self.c.dt)
-
-    prod = self.snapshots_src * self.snapshots_rec
-
-    self.image += scale * np.sum(
-      (prod) /
-      np.sum(self.snapshots_src * self.snapshots_src)
-        + epsilon,
-        axis=0
-    )
+      self.image += self.dt_array[idx] * (
+        (self.snapshots_src[idx] * self.depre) /
+        (np.sum(self.snapshots_src[idx] * self.snapshots_src[idx]) + epsilon)
+      )
 
   def laplacian_filter(self):
     inv_dh = 1.0 / (12.0 * self.c.dh * self.c.dh)
@@ -318,6 +304,7 @@ class Migration:
     plt.show()
 
 class Modeling:
+
   def __init__(
       self, c, mdl: Model, geom: Geometry,
       seis: Seismogram, wl: Wavelet
@@ -341,50 +328,66 @@ class Modeling:
     self.inv_dh2 = 1.0 / (5040.0 * self.dh2)
     self.arg = self.c.dt **2 * self.mdl.model**2
 
+    self.upas_homo = np.zeros(shape)
+    self.upre_homo = np.zeros(shape)
+    self.ufut_homo = np.zeros(shape)
+
+    self.laplacian_homo = np.zeros(shape)
+
+    model_homo = np.full(shape, 1500)
+    self.arg2 = self.c.dt **2 * model_homo**2
+
     self.damp_x = np.zeros((self.mdl.nxx))
     self.damp_z = np.zeros((self.mdl.nzz))
 
     self.ix, self.iz = 0, 0
 
-  def fd(self, ix: int, iz: int) -> None:
+  def remove_direct_wave_offset(self, ix: int, iz: int) -> None:
       self.ix, self.iz = ix, iz
 
       for t in range(1, self.c.nt - 1):
 
         _forward_kernel(
-          self.upas,
-          self.upre,
-          self.ufut,
-          self.laplacian,
-          self.damp_x,
-          self.damp_z,
-          self.inv_dh2,
-          self.mdl.nzz,
-          self.mdl.nxx,
-          self.wl.ricker,
-          self.ix,
-          self.iz,
-          self.dh2,
-          self.arg,
-          t,
+          self.upas, self.upre, self.ufut, self.laplacian,
+          self.damp_x, self.damp_z, self.inv_dh2,
+          self.mdl.nzz, self.mdl.nxx, self.wl.ricker,
+          self.ix, self.iz, self.dh2, self.arg, t
         )
 
-        # global uncalled
-        # if uncalled:
-        #  damp2D = self.damp_x[None, :] * self.damp_z[:, None]
-        #  plt.imshow(damp2D)
-        #  plt.show()
-        #_forward_kernel.parallel_diagnostics(level=4)
-        #  uncalled = False
+        self.__get_seismogram(self.seis.seismogram, self.upre, t)
 
-        for irec in range(len(self.geom.recx)):
-          rx = int(self.geom.recx[irec]) + self.c.nb
-          rz = int(self.geom.recz[irec]) + self.c.nb
-          self.seis.seismogram[t, irec] = self.upre[rz, rx]
+      self.seis.remove_direct_wave(self.ix, self.iz)
 
-      self.upas.fill(0.0)
-      self.upre.fill(0.0)
-      self.ufut.fill(0.0)
+  def remove_direct_wave_model(self, ix: int, iz: int) -> None:
+      self.ix, self.iz = ix, iz
+
+      for t in range(1, self.c.nt - 1):
+
+        _forward_kernel(
+          self.upas, self.upre, self.ufut, self.laplacian,
+          self.damp_x, self.damp_z, self.inv_dh2,
+          self.mdl.nzz, self.mdl.nxx, self.wl.ricker,
+          self.ix, self.iz, self.dh2, self.arg, t
+        )
+
+        self.__get_seismogram(self.seis.seismogram, self.upre, t)
+
+        _forward_kernel(
+          self.upas_homo, self.upre_homo, self.ufut_homo, 
+          self.laplacian_homo, self.damp_x, self.damp_z, 
+          self.inv_dh2, self.mdl.nzz, self.mdl.nxx, 
+          self.wl.ricker, self.ix, self.iz, self.dh2, self.arg2, t
+        )
+
+        self.__get_seismogram(self.seis.seismogram_homo, self.upre_homo, t)
+
+      self.seis.seismogram -= self.seis.seismogram_homo
+
+  def __get_seismogram(self, seismogram: np.ndarray, upre: np.ndarray, t: int) -> None:
+    for irec in range(len(self.geom.recx)):
+      rx = int(self.geom.recx[irec]) + self.c.nb
+      rz = int(self.geom.recz[irec]) + self.c.nb
+      seismogram[t, irec] = upre[rz, rx]
 
   def get_damp(self):
     for i in range(self.mdl.nzz):
@@ -433,6 +436,8 @@ class Seismogram:
     self.c = c
 
     self.seismogram = np.zeros((self.c.nt, self.geom.nrec))
+
+    self.seismogram_homo = np.zeros((self.c.nt, self.geom.nrec))
 
     if self.c.seismogram_mode.upper() == "LOAD":
       self.load()

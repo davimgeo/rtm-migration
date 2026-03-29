@@ -22,8 +22,8 @@ mode = "generate" # Keys: generate/load
 path = ""
 
 [Seismogram.parameters]
-nt = 8001
-dt = 0.0005
+nt = 2001
+dt = 1e-3
 
 [Seismogram.plot]
 perc = 95
@@ -60,5 +60,5 @@ tlag = 0.15
 
 # ------------------------ Snapshots ------------------------
 [Snapshots]
-numNyquist = false
+numNyquist = true
 number = 251

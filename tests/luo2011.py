@@ -4,27 +4,18 @@ import sys
 import os
 
 os.chdir(os.path.join(os.path.dirname(sys.argv[0]), ".."))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # ======================================================== #
-
-import time
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+from src import measure_runtime
+
 OUTPUT_PATH = "data/input/models/"
 
 uncalled = True
-
-def measure_runtime(func):
-  def wrapper(*args, **kwargs):
-    start = time.time()
-    result = func(*args, **kwargs)
-    end = time.time()
-    print(f"Runtime: {round(end - start, 4)} seconds")
-    return result
-
-  return wrapper
 
 class SmoothCircle:
   def __init__(
@@ -206,7 +197,7 @@ center = (nz // 2, nx // 2)
 ref_sigma = 40
 ref_amp = 0.40
 
-prop_type = "amp"
+prop_type = "both"
 
 obj = ObjectiveFunctions()
 
@@ -214,8 +205,8 @@ smooth_circle = SmoothCircle(obj, nz, nx, center, value, ref_sigma, ref_amp)
 smooth_circle.get_ref_circle()
 smooth_circle.varying_circles(ratio=0.3, prop_type=prop_type, iterations=11)
 
-smooth_circle.plot()
-smooth_circle.plot_obj(obj_type="L1", prop_type=prop_type)
+#smooth_circle.plot()
+#smooth_circle.plot_obj(obj_type="L1", prop_type=prop_type)
 
 try:
   fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
@@ -226,9 +217,7 @@ try:
     smooth_circle.l2, 
     linewidth=0, 
     antialiased=False
-    )
-
-  fig.colorbar(surf, shrink=0.5, aspect=5)
+  )
 
   plt.show()
 except:
