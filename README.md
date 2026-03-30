@@ -1,1 +1,1 @@
-[![image_gradient](https://imgur.com/a/ojVdh9D)](https://imgur.com/a/TDDZI2V)
+![image](https://i.imgur.com/Lymogqw.png)
