@@ -11,7 +11,7 @@ save = false
 dh = 10.0
 
 [Modeling.Cerjan]
-nb = 100
+nb = 300
 factor = 0.0015
 
 # ----------------------- Seismogram ------------------------
@@ -22,7 +22,7 @@ mode = "generate" # Keys: generate/load
 path = ""
 
 [Seismogram.parameters]
-nt = 2001
+nt = 5001
 dt = 1e-3
 
 [Seismogram.plot]
@@ -30,27 +30,29 @@ perc = 95
 
 # -------------------------- Model --------------------------
 [Model]
-mode = "create" # Keys: create/load
+mode = "load" # Keys: create/load
 
 [Model.load]
-path = "data/input/models/"
+nx = 1701
+nz = 351
+path = "data/input/models/vp_351x1701_10m.bin"
 
 [Model.create]
 nx = 200
 nz = 100
-interfaces = [50]
-layerValues = [1500, 2000]
+interfaces = [ 50 ]
+layerValues = [ 1500, 2000 ]
 
 # ------------------------- Geometry ------------------------
 [Geometry]
-mode = "load" # Keys: create/load
+mode = "create" # Keys: create/load
 
 [Geometry.load]
 receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources4.txt"
+sources = "data/input/geometry/sources40_marmousi.txt"
 
 [Geometry.create]
-offset = 5
+offset = 15
 receiversDepth = 0
 
 # ------------------------- Wavelet -------------------------

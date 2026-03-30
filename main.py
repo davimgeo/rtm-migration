@@ -12,7 +12,7 @@ def main():
   model = Model(config, geom)
   model.get()
   model.set_boundary()
-  model.gaussian_smooth(sigma=3)
+  model.gaussian_smooth(sigma=10)
 
   wavelet = Wavelet(config)
   wavelet.get_ricker()

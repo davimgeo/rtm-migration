@@ -1,5 +1,6 @@
 from __future__ import annotations
 import time
+from os import system
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,7 +16,7 @@ def measure_runtime(func):
     start = time.time()
     result = func(*args, **kwargs)
     end = time.time()
-    print(f"Runtime: {round(end - start, 4)} seconds")
+    print(f"Function {func.__name__} took: {round(end - start, 4)} seconds")
     return result
 
   return wrapper
@@ -73,6 +74,7 @@ class Migration:
     self.snap_id_rec = self.nsnaps - 1
 
     self.energy = np.zeros(self.c.nt)
+    self.current = 1
 
   def rtm(self):
 
@@ -88,7 +90,7 @@ class Migration:
 
         self.forward_propagation(t)
 
-        self.energy[t] = np.sum(self.upre * self.upre)
+        #self.energy[t] = np.sum(self.upre * self.upre)
 
         self.get_src_snaps(t)
 
@@ -100,11 +102,13 @@ class Migration:
 
       self.image_condition()
 
+      self.show_modeling_status()
+
     if self.c.save_image:
       self.save()
 
-    plt.loglog(np.arange(self.c.nt), self.energy)
-    plt.show()
+    #plt.loglog(np.arange(self.c.nt), self.energy)
+    #plt.show()
 
   def zero_out_matrices(self):
     self.seis.seismogram.fill(0.0)
@@ -160,9 +164,11 @@ class Migration:
       rec = self.depre
 
       self.num += src * rec
+      #self.den += src * src
 
   def image_condition(self):
     self.image += self.dt_snaps * self.num
+    #self.image += self.dt_snaps * (self.num / (self.den + 1e-9))
 
   def __image_condition2(self, epsilon=1e-9):
     src = self.snapshots_src
@@ -234,6 +240,13 @@ class Migration:
     except OSError as e:
       raise OSError(f"Could not save file: {path}") from e
     
+  def show_modeling_status(self):
+    system("clear")
+    progress = self.current/len(self.geom.srcxId)
+    bar = 10 * "██"
+    print(f"\n Shots: {100 * progress}% | {bar[:int((10.0 * progress))]} |")
+    self.current += 1
+
   def plot_snapshots(self, snapshots: np.ndarray) -> None:
     xloc = np.linspace(0, self.c.nx-1, 11, dtype=int)
     xlab = np.array(xloc * self.c.dh, dtype=int)
@@ -362,7 +375,36 @@ class Modeling:
     self.damp_x = np.zeros((self.mdl.nxx))
     self.damp_z = np.zeros((self.mdl.nzz))
 
+    self.nsnaps = 101
+    self.snap_ratio = int((self.c.nt - 1) / self.nsnaps) + 1
+    #self.nsnaps = int((self.c.nt - 1) / self.snap_ratio) + 1
+
+    self.snapshots = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
+
     self.ix, self.iz = 0, 0
+    self.snap_id_src = 0
+    self.current = 1
+
+  def fdm_propagation(self, ix: int, iz: int, isSnap=False) -> None:
+      self.ix, self.iz = ix, iz
+
+      for t in range(1, self.c.nt - 1):
+
+        _forward_kernel(
+          self.upas, self.upre, self.ufut, self.laplacian,
+          self.damp_x, self.damp_z, self.inv_dh2,
+          self.mdl.nzz, self.mdl.nxx, self.wl.ricker,
+          self.ix, self.iz, self.dh2, self.arg, t
+        )
+
+        self.__get_seismogram(self.seis.seismogram, self.upre, t)
+
+        self.get_snapshots(t, isSnap)
+
+  def get_snapshots(self, t: int, isSnap: bool):
+    if isSnap and not t % self.snap_ratio:
+      self.snapshots[self.snap_id_src] = self.upre.copy()
+      self.snap_id_src += 1   
 
   def remove_direct_wave_offset(self, ix: int, iz: int) -> None:
       self.ix, self.iz = ix, iz
@@ -403,7 +445,7 @@ class Modeling:
 
         self.__get_seismogram(self.seis.seismogram_homo, self.upre_homo, t)
 
-      self.seis.seismogram -= self.seis.seismogram_homo
+      #self.seis.seismogram -= self.seis.seismogram_homo
 
   def __get_seismogram(self, seismogram: np.ndarray, upre: np.ndarray, t: int) -> None:
     for irec in range(len(self.geom.recx)):
@@ -437,6 +479,60 @@ class Modeling:
       else:
           d = j - (self.c.nb + self.c.nx - 1)
           self.damp_x[j] = np.exp(-(self.c.factor * d) * (self.c.factor * d))
+
+  def show_modeling_status(self):
+    system("clear")
+    progress = self.current/len(self.geom.srcxId)
+    bar = 10 * "██"
+    print(f"\n Shots: {100 * progress}% | {bar[:int((10.0 * progress))]} |")
+    self.current += 1
+
+  def plot_snapshots(self) -> None:
+    xloc = np.linspace(0, self.c.nx-1, 11, dtype=int)
+    xlab = np.array(xloc * self.c.dh, dtype=int)
+
+    zloc = np.linspace(0, self.c.nz-1, 7, dtype=int)
+    zlab = np.array(zloc * self.c.dh, dtype=int)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    ims = []
+    for snap in self.snapshots:
+      scale = 2.0 * np.std(snap)
+
+      model_frame = ax.imshow(
+        self.mdl.model[self.c.nb:self.c.nb+self.c.nz,
+                             self.c.nb:self.c.nb+self.c.nx],
+        aspect="auto", cmap="jet", alpha=0.5
+      )
+
+      snap_frame = ax.imshow(
+        snap[self.c.nb:self.c.nb+self.c.nz,
+             self.c.nb:self.c.nb+self.c.nx],
+        aspect="auto", cmap="Greys",
+        vmin=-scale, vmax=scale, alpha=0.7
+      )
+
+      ax.plot(self.geom.recx, self.geom.recz, 'bv')
+      ax.plot(self.geom.srcxId, self.geom.srczId, 'r*')
+
+      ims.append([model_frame, snap_frame])
+
+    ani = animation.ArtistAnimation(
+      fig, ims,
+      interval=(self.c.nt / len(self.snapshots) + 1) * self.c.dt * 1e3,
+      blit=False,
+      repeat_delay=0
+    )
+
+    ax.set_xticks(xloc)
+    ax.set_xticklabels(xlab)
+
+    ax.set_yticks(zloc)
+    ax.set_yticklabels(zlab)
+
+    plt.show()
+    return ani
 
 class Wavelet:
   def __init__(self, c):
@@ -473,6 +569,21 @@ class Seismogram:
     self.seismogram = np.fromfile(
         path, dtype=np.float32, count=self.c.nt*self.geom.nrec
         ).reshape([self.c.nt, self.geom.nrec], order='F')
+
+  def save(self, ix, iz, path=None):
+    if path is None:
+      path = (
+        OUTPUT_PATH +
+          f"seismogram_{self.c.nt}nt" +
+          f"_{self.geom.nrec}nrec_({ix, iz})shot.bin"
+      )
+
+    try:
+      self.seismogram.flatten('F').astype('float32', order='F').tofile(path)
+      print(f"Successfully saved: {path}")
+
+    except OSError as e:
+      raise OSError(f"Could not save file: {path}") from e
 
   def remove_direct_wave(self, ix, iz, epsilon=0.09):
       nt = self.seismogram.shape[0]
@@ -577,6 +688,7 @@ class Model:
     mode = self.c.model_mode.upper()
     if mode == "LOAD":
       self.load()
+
     elif mode == "CREATE":
       self.create()
     else:
@@ -837,13 +949,4 @@ def _backward_kernel(
       defut[i, j] = depre[i, j] * damp
       depre[i, j] = depas[i, j] * damp
 
-def measure_runtime(func):
-  def wrapper(*args, **kwargs):
-    start = time.time()
-    result = func(*args, **kwargs)
-    end = time.time()
-    print(f"Runtime: {round(end - start, 4)} seconds")
-    return result
-
-  return wrapper
 

@@ -26,7 +26,9 @@ class Parameters:
 
   # Model 
   model_mode: str = field(default="create", metadata={"toml": "Model.mode"})
-  load_model_path: str = field(default="", metadata={"toml": "Model.load.path"})
+  model_path: str = field(default="", metadata={"toml": "Model.load.path"})
+  nx_load: int = field(default=0, metadata={"toml": "Model.load.nx"})
+  nz_load: int = field(default=0, metadata={"toml": "Model.load.nz"})
   nx: int = field(default=0, metadata={"toml": "Model.create.nx"})
   nz: int = field(default=0, metadata={"toml": "Model.create.nz"})
   interfaces: List[int] = field(default_factory=list, metadata={"toml": "Model.create.interfaces"})
@@ -66,6 +68,8 @@ class Config(Parameters):
       except KeyError as e:
         pass
 
+    self.manage_modes_attributes()
+
     return self
   
   def get_nested(self, root: dict, path: str) -> dict:
@@ -78,4 +82,7 @@ class Config(Parameters):
       node = node[key]
     return node
 
-
+  def manage_modes_attributes(self):
+    if self.model_mode.upper() == "LOAD":
+      self.nx = self.nx_load
+      self.nz = self.nz_load
