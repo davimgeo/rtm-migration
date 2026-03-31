@@ -16,7 +16,7 @@ def measure_runtime(func):
     start = time.time()
     result = func(*args, **kwargs)
     end = time.time()
-    print(f"Function {func.__name__} took: {round(end - start, 4)} seconds")
+    print(f"Function {func.__name__} took: {round(end - start, 10)} seconds")
     return result
 
   return wrapper
@@ -377,11 +377,12 @@ class Modeling:
 
     self.nsnaps = 101
     self.snap_ratio = int((self.c.nt - 1) / self.nsnaps) + 1
-    #self.nsnaps = int((self.c.nt - 1) / self.snap_ratio) + 1
 
     self.snapshots = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
 
     self.ix, self.iz = 0, 0
+    self.rx = self.geom.recx.astype(int) + self.c.nb
+    self.rz = self.geom.recz.astype(int) + self.c.nb
     self.snap_id_src = 0
     self.current = 1
 
@@ -400,6 +401,10 @@ class Modeling:
         self.__get_seismogram(self.seis.seismogram, self.upre, t)
 
         self.get_snapshots(t, isSnap)
+
+      self.upas.fill(0.0)
+      self.upre.fill(0.0)
+      self.ufut.fill(0.0)
 
   def get_snapshots(self, t: int, isSnap: bool):
     if isSnap and not t % self.snap_ratio:
@@ -424,6 +429,8 @@ class Modeling:
 
   def remove_direct_wave_model(self, ix: int, iz: int) -> None:
       self.ix, self.iz = ix, iz
+      
+      self.zero_out_matrices()
 
       for t in range(1, self.c.nt - 1):
 
@@ -445,7 +452,19 @@ class Modeling:
 
         self.__get_seismogram(self.seis.seismogram_homo, self.upre_homo, t)
 
-      #self.seis.seismogram -= self.seis.seismogram_homo
+      self.seis.seismogram -= self.seis.seismogram_homo
+
+
+  def zero_out_matrices(self):
+    self.seis.seismogram.fill(0.0)
+    self.seis.seismogram_homo.fill(0.0)
+
+    self.upas.fill(0.0)
+    self.upre.fill(0.0)
+    self.ufut.fill(0.0)
+    self.upas_homo.fill(0.0)
+    self.upre_homo.fill(0.0)
+    self.ufut_homo.fill(0.0)
 
   def __get_seismogram(self, seismogram: np.ndarray, upre: np.ndarray, t: int) -> None:
     for irec in range(len(self.geom.recx)):
