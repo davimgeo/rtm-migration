@@ -28,6 +28,9 @@ class SmoothCircle:
 
     self.nz, self.nx = cfg.nz, cfg.nx
 
+    self.prop_type = cfg.prop_type
+    self.cfg_type = cfg.cfg_type
+
     self.center = cfg.center
     self.ref_sigma = cfg.ref_sigma
     self.ref_amp = cfg.ref_amp
@@ -87,8 +90,8 @@ class SmoothCircle:
     elif prop_type == "both":
       
       for i, it in enumerate(range(-half_it, half_it + 1)):
-        self.delta_sigma[i] = self.ref_sigma - it * ratio
-        self.delta_amp[i] = self.ref_amp - it * ratio
+        self.delta_sigma[i] = it * ratio
+        self.delta_amp[i] = it * ratio
 
       self.X, self.Y = np.meshgrid(self.delta_sigma, self.delta_amp)
 
@@ -97,8 +100,8 @@ class SmoothCircle:
 
       for i in range(iterations):
        for j in range(iterations):
-         sigma = self.X[i, j]
-         amp   = self.Y[i, j]
+         sigma = self.ref_sigma - self.X[i, j]
+         amp   = self.ref_amp -  self.Y[i, j]
       
          d_calc = self.__smooth_kernel(sigma=sigma, amp=amp)
       
@@ -160,28 +163,66 @@ class SmoothCircle:
 
     plt.show()
 
-  def plot_cfg(self, cfg_type: str, prop_type: str) -> None:
+  def plot_varying_circles(self) -> None:
 
-    if cfg_type == "L2":
+    if self.cfg_type == "L2":
       cfg = self.l2
-    elif cfg_type == "L1":
-      cfg= self.l1
+    elif self.cfg_type == "L1":
+      cfg = self.l1
     else:
       raise TypeError("Make sure you choose a valid type. [L2, L1]")
 
-    if prop_type == "sigma":
+    if self.prop_type == "sigma":
       label = "Δσ"
       x = self.delta_sigma
-    elif prop_type == "amp":
+
+    elif self.prop_type == "amp":
       label = "Δ_amp"
       x = self.delta_amp
 
+    elif self.prop_type == "both":
+
+      fig, ax = plt.subplots(
+        figsize=(10, 8),
+        subplot_kw={"projection": "3d"}
+      )
+
+      surf = ax.plot_surface(
+        self.X, 
+        self.Y, 
+        self.l2,
+        cmap="viridis",
+        linewidth=0,
+        vmin=self.l2.min(),
+        antialiased=True
+      )
+
+      ax.scatter(
+        0, 0, np.min(self.l2),
+        color='r',
+        s=50,
+        label='Minimum'
+      )
+
+      fig.colorbar(surf, shrink=0.5, aspect=5)
+
+      ax.set_box_aspect([1,1,1])
+
+      ax.set_xlabel(r'$\Delta \sigma$')
+      ax.set_ylabel(r'$\Delta amp$')
+      ax.set_zlabel(self.cfg_type)
+
+      ax.view_init(elev=30, azim=45)
+
+      ax.legend()
+      plt.show()
+ 
     fig, ax = plt.subplots(figsize=(12, 5))
 
     img = ax.plot(x, cfg)
 
     ax.set_xlabel(label, fontsize=13)
-    ax.set_ylabel(cfg_type, fontsize=13)
+    ax.set_ylabel(self.cfg_type, fontsize=13)
     #ax.set_title("")
 
     plt.grid(True)
@@ -200,39 +241,15 @@ class Parameters:
   ref_sigma: int = 40
   ref_amp: float = 0.40
 
+  cfg_type: str = "L2"
   prop_type: str = "both"
 
 cfg = Parameters()
 
 smooth_circle = SmoothCircle(cfg)
 smooth_circle.get_ref_circle()
-smooth_circle.varying_circles(ratio=0.3, prop_type=cfg.prop_type, iterations=11)
+smooth_circle.varying_circles(ratio=0.1, prop_type=cfg.prop_type, iterations=11)
 
 #smooth_circle.plot()
-#smooth_circle.plot_cfg(cfg_type="L1", prop_type=cfg.prop_type)
+smooth_circle.plot_varying_circles()
 
-fig, ax = plt.subplots(
-  figsize=(10, 8),
-  subplot_kw={"projection": "3d"}
-)
-
-surf = ax.plot_surface(
-    smooth_circle.X, 
-    smooth_circle.Y, 
-    smooth_circle.l2,
-    cmap="viridis",
-    linewidth=0,
-    antialiased=True
-)
-
-fig.colorbar(surf, shrink=0.7, aspect=20)
-
-ax.set_box_aspect([1,1,1])
-
-ax.set_xlabel(r'$\Delta \sigma$')
-ax.set_ylabel(r'$\Delta amp$')
-ax.set_zlabel('L2')
-
-ax.view_init(elev=30, azim=45)
-
-plt.show()
