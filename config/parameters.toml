@@ -49,7 +49,7 @@ mode = "load" # Keys: create/load
 
 [Geometry.load]
 receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources20.txt"
+sources = "data/input/geometry/sources4.txt"
 
 [Geometry.create]
 offset = 5

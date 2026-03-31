@@ -12,12 +12,46 @@ from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import numpy as np
-
-from src import measure_runtime
+from numba import njit, prange
 
 OUTPUT_PATH = "data/input/models/"
 
 uncalled = True
+
+def measure_runtime(func):
+  import time
+  def wrapper(*args, **kwargs):
+    start = time.time()
+    result = func(*args, **kwargs)
+    end = time.time()
+    print(f"Function {func.__name__} took: {round(end - start, 4)} seconds")
+    return result
+
+  return wrapper
+
+@njit(parallel=True, fastmath=True)
+def _smooth_kernel(
+  sigma: float,
+  amp: float,
+  base_model: np.ndarray,
+  R2: np.ndarray,
+  nx: int,
+  nz: int,
+  epsilon=1e-9
+) -> np.ndarray:
+
+  gaussian = np.empty((nz, nx), dtype=np.float64)
+
+  arg = 1.0 / (2.0 * (sigma + epsilon))**2
+
+  for i in prange(nz):
+    for j in range(nx):
+
+      gaussian[i, j] = amp * np.exp(
+          -R2[i, j] * arg
+      )
+
+  return (1 + gaussian) * base_model
 
 class SmoothCircle:
   def __init__(
@@ -28,80 +62,60 @@ class SmoothCircle:
 
     self.nz, self.nx = cfg.nz, cfg.nx
 
-    self.prop_type = cfg.prop_type
-    self.cfg_type = cfg.cfg_type
+    self.base_model = np.full((cfg.nz, cfg.nx), cfg.value)
 
-    self.center = cfg.center
-    self.ref_sigma = cfg.ref_sigma
-    self.ref_amp = cfg.ref_amp
-
-    self.value = cfg.value
+    self.vmin, self.vmax = cfg.varying_range
 
     self.ref_circle_smooth = np.zeros((cfg.nz, cfg.nx))
 
-    self.delta_sigma = np.array([])
-    self.delta_amp = np.array([])
+    self.sigma = np.linspace(self.vmin, self.vmax, cfg.size)
+    self.amp   = np.linspace(0, 80, cfg.size)
 
-    self.l2 = np.array([])
-    self.l1 = np.array([])
+    #self.sigma = np.sort(np.unique(np.append(self.sigma, self.cfg.ref_sigma)))
+    #self.amp = np.sort(np.unique(np.append(self.amp, self.cfg.ref_amp)))
 
-    self.X, self.Y = None, None
+    self.delta_sigma = self.cfg.ref_sigma - self.sigma
+    self.delta_amp = self.cfg.ref_amp - self.amp
+
+    self.l2 = np.zeros(cfg.size)
+    self.l1 = np.zeros(cfg.size)
+
+    x = np.arange(cfg.nz)
+    y = np.arange(cfg.nx)
+
+    X, Y = np.meshgrid(x, y, indexing="ij")
+    self.R2 = (X - cfg.center[0])**2 + (Y - cfg.center[1])**2
+
+    self.X, self.Y = np.meshgrid(self.delta_sigma, self.delta_amp)
 
   @measure_runtime
-  def varying_circles(self, ratio: float, prop_type: str, iterations=11) -> None:
-    assert ~(iterations % 2) and iterations > 1
+  def varying_circles(self) -> None:
 
-    half_it = int(iterations * 0.5)
+    if self.cfg.prop_type == "sigma":
 
-    self.delta_sigma = np.zeros(iterations)
-    self.delta_amp = np.zeros(iterations)
+      for idx, sigma in enumerate(self.sigma):
 
-    self.l2 = np.zeros(iterations)
-    self.l1 = np.zeros(iterations)
-
-    if prop_type == "sigma":
-
-      for it in range(-half_it, half_it + 1):
-        idx = it + half_it
-
-        sigma = self.ref_sigma - it * ratio
-
-        d_calc = self.__smooth_kernel(sigma=sigma, amp=0.40)
-
-        self.delta_sigma[idx] = self.ref_sigma - sigma
+        d_calc = self.__smooth_kernel(sigma=sigma, amp=self.cfg.ref_amp)
 
         self.l2[idx] = self.l2_norm(self.ref_circle_smooth, d_calc)
         self.l1[idx] = self.l1_norm(self.ref_circle_smooth, d_calc)
 
-    elif prop_type == "amp":
+    elif self.cfg.prop_type == "amp":
 
-      for it in range(-half_it, half_it + 1):
-        idx = it + half_it
+      for idx, amp in enumerate(self.amp):
 
-        amp =  self.ref_amp - it * ratio
-
-        d_calc = self.__smooth_kernel(self.ref_sigma, amp)
-
-        self.delta_amp[idx] = self.ref_amp - amp
+        d_calc = self.__smooth_kernel(self.cfg.ref_sigma, amp)
 
         self.l2[idx] = self.l2_norm(self.ref_circle_smooth, d_calc)
         self.l1[idx] = self.l1_norm(self.ref_circle_smooth, d_calc)
 
-    elif prop_type == "both":
-      
-      for i, it in enumerate(range(-half_it, half_it + 1)):
-        self.delta_sigma[i] = it * ratio
-        self.delta_amp[i] = it * ratio
-
-      self.X, self.Y = np.meshgrid(self.delta_sigma, self.delta_amp)
+    elif self.cfg.prop_type == "both":
 
       self.l2 = np.zeros_like(self.X)
       self.l1 = np.zeros_like(self.Y)
 
-      for i in range(iterations):
-       for j in range(iterations):
-         sigma = self.ref_sigma - self.X[i, j]
-         amp   = self.ref_amp -  self.Y[i, j]
+      for i, sigma in enumerate(self.sigma):
+       for j, amp in enumerate(self.amp):
       
          d_calc = self.__smooth_kernel(sigma=sigma, amp=amp)
       
@@ -112,30 +126,13 @@ class SmoothCircle:
       raise TypeError("Make sure you choose a valid type. [sigma, amp, both]")
 
   def get_ref_circle(self):
-    self.ref_circle_smooth = self.__smooth_kernel(self.ref_sigma, self.ref_amp)
+    self.ref_circle_smooth = self.__smooth_kernel(self.cfg.ref_sigma, self.cfg.ref_amp)
 
-  def __smooth_kernel(
-    self,
-    sigma: float,
-    amp: float,
-    center=None,
-    epsilon=1e-9
-  ) -> np.ndarray:
-    if center is None:
-      center = self.center
-
-    model = np.full((self.nz, self.nx), self.value)
-
-    x, y = np.ogrid[:self.nz, :self.nx]
-
-    x2 = (x - center[0])**2
-    y2 = (y - center[1])**2
-
-    gaussian = amp * (
-        np.exp(-(x2 + y2) / (2.0 * (sigma + epsilon)**2))
+  def __smooth_kernel(self, sigma, amp):
+    return _smooth_kernel(
+      sigma, amp, self.base_model,
+      self.R2, self.nx, self.nz
     )
-
-    return (1 + gaussian) * model
 
   def l2_norm(self, d_obs, d_calc) -> np.ndarray:
     return np.sqrt(np.sum((d_obs - d_calc)**2))
@@ -165,70 +162,90 @@ class SmoothCircle:
 
   def plot_varying_circles(self) -> None:
 
-    if self.cfg_type == "L2":
-      cfg = self.l2
-    elif self.cfg_type == "L1":
-      cfg = self.l1
-    else:
-      raise TypeError("Make sure you choose a valid type. [L2, L1]")
+    if self.cfg.prop_type == "sigma":
 
-    if self.prop_type == "sigma":
-      label = "Δσ"
-      x = self.delta_sigma
+      l2_norm = (self.l2 - self.l2.min()) / (self.l2.max() - self.l2.min())
+      l1_norm = (self.l1 - self.l1.min()) / (self.l1.max() - self.l1.min())
 
-    elif self.prop_type == "amp":
-      label = "Δ_amp"
-      x = self.delta_amp
+      fig, ax = plt.subplots(figsize=(12, 5))
 
-    elif self.prop_type == "both":
+      ax.plot(self.delta_sigma, l2_norm, label="L2", color='b')
+      ax.plot(self.delta_sigma, l1_norm, label="L1", color='r')
+
+      ax.set_xlabel(r'$\Delta \sigma$', fontsize=13)
+      ax.set_ylabel("Obj Function Normalized", fontsize=13)
+
+      ax.legend()
+      plt.grid(True)
+      plt.show()
+
+    elif self.cfg.prop_type == "amp":
+
+      l2_norm = (self.l2 - self.l2.min()) / (self.l2.max() - self.l2.min())
+      l1_norm = (self.l1 - self.l1.min()) / (self.l1.max() - self.l1.min())
+
+      fig, ax = plt.subplots(figsize=(12, 5))
+
+      ax.plot(self.delta_amp, l2_norm, label="L2", color='b')
+      ax.plot(self.delta_amp, l1_norm, label="L1", color='r')
+
+      ax.set_xlabel(r'$\sigma$', fontsize=13)
+      ax.set_ylabel("Obj Function Normalized", fontsize=13)
+
+      ax.legend()
+      plt.grid(True)
+      plt.show()
+
+    elif self.cfg.prop_type == "both":
 
       fig, ax = plt.subplots(
         figsize=(10, 8),
         subplot_kw={"projection": "3d"}
       )
 
-      surf = ax.plot_surface(
-        self.X, 
-        self.Y, 
-        self.l2,
+      l2_norm = (self.l2 - self.l2.min()) / (self.l2.max() - self.l2.min())
+      l1_norm = (self.l1 - self.l1.min()) / (self.l1.max() - self.l1.min())
+
+      surf1 = ax.plot_surface(
+        self.X, self.Y, l2_norm,
         cmap="viridis",
-        linewidth=0,
-        vmin=self.l2.min(),
-        antialiased=True
+        alpha=0.8
       )
 
       ax.scatter(
-        0, 0, np.min(self.l2),
-        color='r',
+        self.cfg.ref_sigma, self.cfg.ref_amp, 0.0,
+        color='b',
         s=50,
-        label='Minimum'
+        label='Reference'
       )
 
-      fig.colorbar(surf, shrink=0.5, aspect=5)
+      mask = np.isclose(l2_norm, np.min(l2_norm), atol=1e-6)
 
-      ax.set_box_aspect([1,1,1])
+      i, j = np.unravel_index(np.argmin(self.l2), self.l2.shape)
+      print(self.X[i, j], self.Y[i, j])
 
-      ax.set_xlabel(r'$\Delta \sigma$')
-      ax.set_ylabel(r'$\Delta amp$')
-      ax.set_zlabel(self.cfg_type)
+      ax.scatter(
+        self.X[i, j],
+        self.Y[i, j],
+        l2_norm[i, j],
+        s=50,
+        color='r',
+        label="Minimum"
+      )
+
+      fig.colorbar(surf1, shrink=0.5, aspect=5)
+
+      ax.set_box_aspect([1, 1, 1])
+
+      ax.set_xlabel(r'$\Delta \sigma$', fontsize=13)
+      ax.set_ylabel(r'$\Delta amp$', fontsize=13)
+      ax.set_zlabel(self.cfg.cfg_type, fontsize=13)
 
       ax.view_init(elev=30, azim=45)
 
-      ax.legend()
+      ax.legend(loc="lower right")
       plt.show()
  
-    fig, ax = plt.subplots(figsize=(12, 5))
-
-    img = ax.plot(x, cfg)
-
-    ax.set_xlabel(label, fontsize=13)
-    ax.set_ylabel(self.cfg_type, fontsize=13)
-    #ax.set_title("")
-
-    plt.grid(True)
-
-    plt.show()
-
 @dataclass
 class Parameters:
   nz: int = 300
@@ -239,7 +256,10 @@ class Parameters:
   center: tuple = (nz // 2, nx // 2)
 
   ref_sigma: int = 40
-  ref_amp: float = 0.40
+  ref_amp: float = 4
+
+  varying_range = [0, 80]
+  size = 51
 
   cfg_type: str = "L2"
   prop_type: str = "both"
@@ -248,8 +268,15 @@ cfg = Parameters()
 
 smooth_circle = SmoothCircle(cfg)
 smooth_circle.get_ref_circle()
-smooth_circle.varying_circles(ratio=0.1, prop_type=cfg.prop_type, iterations=11)
+smooth_circle.varying_circles()
 
-#smooth_circle.plot()
+smooth_circle.plot()
 smooth_circle.plot_varying_circles()
+
+# 20.099999999999998 0.6985
+
+# compare test and smooth_circle.ref_circle_smooth
+
+ref = smooth_circle.ref_circle_smooth
+test = smooth_circle._SmoothCircle__smooth_kernel(20.1, 0.6985)
 

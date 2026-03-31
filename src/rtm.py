@@ -454,7 +454,6 @@ class Modeling:
 
       self.seis.seismogram -= self.seis.seismogram_homo
 
-
   def zero_out_matrices(self):
     self.seis.seismogram.fill(0.0)
     self.seis.seismogram_homo.fill(0.0)
