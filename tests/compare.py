@@ -12,50 +12,51 @@ nx, nz = 200, 100
 
 nsnaps = 219
 
-image_full = np.fromfile(
-    OUTPUT_PATH + f"image_{nsnaps}snaps_200x100_im_full.bin", dtype=np.float32,
-    count=nx*nz
-).reshape([nz, nx], order='F')
+# image_full = np.fromfile(
+#     OUTPUT_PATH + f"image_{nsnaps}snaps_200x100_im_full.bin", dtype=np.float32,
+#     count=nx*nz
+# ).reshape([nz, nx], order='F')
 
-image_700snaps = np.fromfile(
-    OUTPUT_PATH + f"image_{nsnaps}snaps_200x100.bin", dtype=np.float32,
-    count=nx*nz
-).reshape([nz, nx], order='F')
+# image_700snaps = np.fromfile(
+#     OUTPUT_PATH + f"image_{nsnaps}snaps_200x100.bin", dtype=np.float32,
+#     count=nx*nz
+# ).reshape([nz, nx], order='F')
 
-diff = image_full - image_700snaps
-diff_norm = diff / np.max(np.abs(image_full))
+# diff = image_full - image_700snaps
+# diff_norm = diff / np.max(np.abs(image_full))
 
-vmin = min(image_full.min(), image_700snaps.min())
-vmax = max(image_full.max(), image_700snaps.max())
+# vmin = min(image_full.min(), image_700snaps.min())
+# vmax = max(image_full.max(), image_700snaps.max())
 
-fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(15, 5))
+# fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(15, 5))
 
-im0 = axs[0].imshow(image_full, aspect='auto', cmap="Greys", vmin=vmin, vmax=vmax)
-axs[0].set_title("Image Offset")
-plt.colorbar(im0, ax=axs[0])
+# im0 = axs[0].imshow(image_full, aspect='auto', cmap="Greys", vmin=vmin, vmax=vmax)
+# axs[0].set_title("Image Offset")
+# plt.colorbar(im0, ax=axs[0])
 
-im1 = axs[1].imshow(image_700snaps, aspect='auto', cmap="Greys", vmin=vmin, vmax=vmax)
-axs[1].set_title(f"Image Model")
-plt.colorbar(im1, ax=axs[1])
+# im1 = axs[1].imshow(image_700snaps, aspect='auto', cmap="Greys", vmin=vmin, vmax=vmax)
+# axs[1].set_title(f"Image Model")
+# plt.colorbar(im1, ax=axs[1])
 
-im2 = axs[2].imshow(diff_norm, aspect='auto', cmap="Greys")
-axs[2].set_title("Difference (%)")
-cbar = plt.colorbar(im2, ax=axs[2])
+# im2 = axs[2].imshow(diff_norm, aspect='auto', cmap="Greys")
+# axs[2].set_title("Difference (%)")
+# cbar = plt.colorbar(im2, ax=axs[2])
 
-rel_error = np.max(np.abs(diff)) / np.max(np.abs(image_full))
-plt.suptitle(f"Relative Error: {rel_error * 100:.2f}%")
+# rel_error = np.max(np.abs(diff)) / np.max(np.abs(image_full))
+# plt.suptitle(f"Relative Error: {rel_error * 100:.2f}%")
 
-plt.tight_layout()
-plt.show()
+# plt.tight_layout()
+# plt.show()
 
-runtime_full = 13.7345
-runtime_700 = 22.3913
+runtime_full = 240.43
+runtime_old = 61.62
+runtime_new = 16.63
 
-plt.bar(["Full", f"{nsnaps} snaps"], [runtime_full, runtime_700])
+plt.bar(["V1", "V2", "V3"], [runtime_full, runtime_old, runtime_new])
 
-plt.suptitle(f"Percentual Difference: {((runtime_full - runtime_700) / runtime_full * 100):.2f}%")
-plt.title("Runtime Comparison")
-plt.ylabel("Time [s]")
+#plt.suptitle(f"Percentual Difference: {((runtime_full - runtime_700) / runtime_full * 100):.2f}%")
+plt.title("Runtime Comparison", fontsize=13)
+plt.ylabel("Time [s]", fontsize=13)
 
 plt.grid(axis='y', linestyle='--', alpha=0.7)
 plt.show()

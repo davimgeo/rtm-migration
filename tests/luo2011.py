@@ -198,13 +198,23 @@ class SmoothCircle:
 
     elif self.cfg.prop_type == "both":
 
+      l2_norm = (self.l2 - self.l2.min()) / (self.l2.max() - self.l2.min())
+      l1_norm = (self.l1 - self.l1.min()) / (self.l1.max() - self.l1.min())
+
+      plt.imshow(l2_norm)
+
+      plt.title("L2 Normalized", fontsize=13)
+      plt.xlabel(r"$\Delta \sigma$", fontsize=13)
+      plt.ylabel(r"$\Delta amp$", fontsize=13)
+
+      plt.colorbar()
+      plt.tight_layout()
+      plt.show()
+
       fig, ax = plt.subplots(
         figsize=(10, 8),
         subplot_kw={"projection": "3d"}
       )
-
-      l2_norm = (self.l2 - self.l2.min()) / (self.l2.max() - self.l2.min())
-      l1_norm = (self.l1 - self.l1.min()) / (self.l1.max() - self.l1.min())
 
       surf1 = ax.plot_surface(
         self.X, self.Y, l2_norm,
@@ -212,26 +222,26 @@ class SmoothCircle:
         alpha=0.8
       )
 
-      ax.scatter(
-        self.cfg.ref_sigma, self.cfg.ref_amp, 0.0,
-        color='b',
-        s=50,
-        label='Reference'
-      )
+      # ax.scatter(
+      #   self.cfg.ref_sigma, self.cfg.ref_amp, 0.0,
+      #   color='b',
+      #   s=50,
+      #   label='Reference'
+      # )
 
       mask = np.isclose(l2_norm, np.min(l2_norm), atol=1e-6)
 
       i, j = np.unravel_index(np.argmin(self.l2), self.l2.shape)
       print(self.X[i, j], self.Y[i, j])
 
-      ax.scatter(
-        self.X[i, j],
-        self.Y[i, j],
-        l2_norm[i, j],
-        s=50,
-        color='r',
-        label="Minimum"
-      )
+      # ax.scatter(
+      #   self.X[i, j],
+      #   self.Y[i, j],
+      #   l2_norm[i, j],
+      #   s=50,
+      #   color='r',
+      #   label="Minimum"
+      # )
 
       fig.colorbar(surf1, shrink=0.5, aspect=5)
 
@@ -241,9 +251,9 @@ class SmoothCircle:
       ax.set_ylabel(r'$\Delta amp$', fontsize=13)
       ax.set_zlabel(self.cfg.cfg_type, fontsize=13)
 
-      ax.view_init(elev=30, azim=45)
+      ax.view_init(elev=15, azim=4)
 
-      ax.legend(loc="lower right")
+      #ax.legend(loc="lower right")
       plt.show()
  
 @dataclass
@@ -256,7 +266,7 @@ class Parameters:
   center: tuple = (nz // 2, nx // 2)
 
   ref_sigma: int = 40
-  ref_amp: float = 4
+  ref_amp: float = 0.40
 
   varying_range = [0, 80]
   size = 51
@@ -277,6 +287,6 @@ smooth_circle.plot_varying_circles()
 
 # compare test and smooth_circle.ref_circle_smooth
 
-ref = smooth_circle.ref_circle_smooth
-test = smooth_circle._SmoothCircle__smooth_kernel(20.1, 0.6985)
+#ref = smooth_circle.ref_circle_smooth
+#test = smooth_circle._SmoothCircle__smooth_kernel(20.1, 0.6985)
 

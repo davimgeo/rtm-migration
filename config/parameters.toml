@@ -30,7 +30,7 @@ perc = 95
 
 # -------------------------- Model --------------------------
 [Model]
-mode = "create" # Keys: create/load
+mode = "load" # Keys: create/load
 
 [Model.load]
 nx = 1701
@@ -45,14 +45,14 @@ layerValues = [ 1500, 2000 ]
 
 # ------------------------- Geometry ------------------------
 [Geometry]
-mode = "load" # Keys: create/load
+mode = "create" # Keys: create/load
 
 [Geometry.load]
 receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources4.txt"
+sources = "data/input/geometry/sources40_marmousi.txt"
 
 [Geometry.create]
-offset = 5
+offset = 15
 receiversDepth = 0
 
 # ------------------------- Wavelet -------------------------
