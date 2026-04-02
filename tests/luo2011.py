@@ -69,7 +69,7 @@ class SmoothCircle:
     self.ref_circle_smooth = np.zeros((cfg.nz, cfg.nx))
 
     self.sigma = np.linspace(self.vmin, self.vmax, cfg.size)
-    self.amp   = np.linspace(0, 80, cfg.size)
+    self.amp   = np.linspace(self.vmin, self.vmax, cfg.size)
 
     #self.sigma = np.sort(np.unique(np.append(self.sigma, self.cfg.ref_sigma)))
     #self.amp = np.sort(np.unique(np.append(self.amp, self.cfg.ref_amp)))
@@ -95,7 +95,7 @@ class SmoothCircle:
 
       for idx, sigma in enumerate(self.sigma):
 
-        d_calc = self.__smooth_kernel(sigma=sigma, amp=self.cfg.ref_amp)
+        d_calc = self.smooth_kernel(sigma=sigma, amp=self.cfg.ref_amp)
 
         self.l2[idx] = self.l2_norm(self.ref_circle_smooth, d_calc)
         self.l1[idx] = self.l1_norm(self.ref_circle_smooth, d_calc)
@@ -104,7 +104,7 @@ class SmoothCircle:
 
       for idx, amp in enumerate(self.amp):
 
-        d_calc = self.__smooth_kernel(self.cfg.ref_sigma, amp)
+        d_calc = self.smooth_kernel(self.cfg.ref_sigma, amp)
 
         self.l2[idx] = self.l2_norm(self.ref_circle_smooth, d_calc)
         self.l1[idx] = self.l1_norm(self.ref_circle_smooth, d_calc)
@@ -117,7 +117,7 @@ class SmoothCircle:
       for i, sigma in enumerate(self.sigma):
        for j, amp in enumerate(self.amp):
       
-         d_calc = self.__smooth_kernel(sigma=sigma, amp=amp)
+         d_calc = self.smooth_kernel(sigma=sigma, amp=amp)
       
          self.l2[i, j] = self.l2_norm(self.ref_circle_smooth, d_calc)
          self.l1[i, j] = self.l1_norm(self.ref_circle_smooth, d_calc)
@@ -126,9 +126,9 @@ class SmoothCircle:
       raise TypeError("Make sure you choose a valid type. [sigma, amp, both]")
 
   def get_ref_circle(self):
-    self.ref_circle_smooth = self.__smooth_kernel(self.cfg.ref_sigma, self.cfg.ref_amp)
+    self.ref_circle_smooth = self.smooth_kernel(self.cfg.ref_sigma, self.cfg.ref_amp)
 
-  def __smooth_kernel(self, sigma, amp):
+  def smooth_kernel(self, sigma, amp):
     return _smooth_kernel(
       sigma, amp, self.base_model,
       self.R2, self.nx, self.nz
@@ -148,8 +148,8 @@ class SmoothCircle:
 
     img = ax.imshow(
       model,
-      aspect="auto",
-      cmap="jet",
+      #aspect="auto",
+      cmap="viridis",
     )
 
     ax.set_xlabel("Distance [m]")
@@ -198,6 +198,7 @@ class SmoothCircle:
 
     elif self.cfg.prop_type == "both":
 
+<<<<<<< HEAD
       l2_norm = (self.l2 - self.l2.min()) / (self.l2.max() - self.l2.min())
       l1_norm = (self.l1 - self.l1.min()) / (self.l1.max() - self.l1.min())
 
@@ -209,6 +210,18 @@ class SmoothCircle:
 
       plt.colorbar()
       plt.tight_layout()
+=======
+      if self.cfg.cfg_type == "L1":
+        obj = self.l1
+        obj_norm = (self.l1 - self.l1.min()) / (self.l1.max() - self.l1.min())
+      elif self.cfg.cfg_type == "L2":
+        obj = self.l2
+        obj_norm = (self.l2 - self.l2.min()) / (self.l2.max() - self.l2.min())
+      else:
+        raise KeyError("Choose a valid key. [L1/L2]")
+
+      plt.imshow(obj_norm)
+>>>>>>> 92cf59e (added second derivative)
       plt.show()
 
       fig, ax = plt.subplots(
@@ -217,23 +230,42 @@ class SmoothCircle:
       )
 
       surf1 = ax.plot_surface(
-        self.X, self.Y, l2_norm,
+        self.X, self.Y, obj_norm,
         cmap="viridis",
         alpha=0.8
       )
 
+<<<<<<< HEAD
       # ax.scatter(
       #   self.cfg.ref_sigma, self.cfg.ref_amp, 0.0,
       #   color='b',
       #   s=50,
       #   label='Reference'
       # )
+=======
+      ax.scatter(
+        0.0, 0.0, 0.0,
+        color='b',
+        s=50,
+        label='Reference: (0.0, 0.0, 0.0)'
+      )
+>>>>>>> 92cf59e (added second derivative)
 
-      mask = np.isclose(l2_norm, np.min(l2_norm), atol=1e-6)
+      #mask = np.isclose(l2_norm, np.min(l2_norm), atol=1e-6)
 
-      i, j = np.unravel_index(np.argmin(self.l2), self.l2.shape)
-      print(self.X[i, j], self.Y[i, j])
+      i, j = np.unravel_index(np.argmin(obj_norm), obj_norm.shape)
 
+      sigma_min_real = self.X[i, j] 
+      amp_min_real = self.Y[i, j]
+
+      sigma_min = self.cfg.ref_sigma - sigma_min_real
+      amp_min = self.cfg.ref_amp - amp_min_real
+      print(sigma_min, amp_min)
+
+      print(self.cfg.ref_amp * self.cfg.ref_sigma**2)
+      print(amp_min * sigma_min**2)
+
+<<<<<<< HEAD
       # ax.scatter(
       #   self.X[i, j],
       #   self.Y[i, j],
@@ -242,6 +274,15 @@ class SmoothCircle:
       #   color='r',
       #   label="Minimum"
       # )
+=======
+      ax.scatter(
+        sigma_min_real,
+        amp_min_real,
+        obj_norm[i, j],
+        s=50,
+        label=f"Minimum Found: {sigma_min_real, amp_min_real, obj_norm[i, j]}"
+      )
+>>>>>>> 92cf59e (added second derivative)
 
       fig.colorbar(surf1, shrink=0.5, aspect=5)
 
@@ -251,9 +292,15 @@ class SmoothCircle:
       ax.set_ylabel(r'$\Delta amp$', fontsize=13)
       ax.set_zlabel(self.cfg.cfg_type, fontsize=13)
 
+<<<<<<< HEAD
       ax.view_init(elev=15, azim=4)
 
       #ax.legend(loc="lower right")
+=======
+      ax.view_init(elev=13, azim=-16)
+
+      ax.legend(loc="upper right")
+>>>>>>> 92cf59e (added second derivative)
       plt.show()
  
 @dataclass
@@ -265,8 +312,13 @@ class Parameters:
 
   center: tuple = (nz // 2, nx // 2)
 
+<<<<<<< HEAD
   ref_sigma: int = 40
   ref_amp: float = 0.40
+=======
+  ref_sigma: int = 15
+  ref_amp: float = 1.5
+>>>>>>> 92cf59e (added second derivative)
 
   varying_range = [0, 80]
   size = 51
@@ -280,13 +332,37 @@ smooth_circle = SmoothCircle(cfg)
 smooth_circle.get_ref_circle()
 smooth_circle.varying_circles()
 
-smooth_circle.plot()
+#smooth_circle.plot()
 smooth_circle.plot_varying_circles()
 
+<<<<<<< HEAD
 # 20.099999999999998 0.6985
 
 # compare test and smooth_circle.ref_circle_smooth
 
 #ref = smooth_circle.ref_circle_smooth
 #test = smooth_circle._SmoothCircle__smooth_kernel(20.1, 0.6985)
+=======
+ref = smooth_circle.ref_circle_smooth
+test = smooth_circle.smooth_kernel(1.6, 16.0)
+>>>>>>> 92cf59e (added second derivative)
 
+diff = test - ref
+
+# ---- Plot ----
+fig, ax = plt.subplots(nrows=3, ncols=1, figsize=(15,5))
+
+im0 = ax[0].imshow(ref, cmap="viridis")
+ax[0].set_title("Reference")
+#plt.colorbar(im0, ax=ax[0])
+
+im1 = ax[1].imshow(test, cmap="viridis")
+ax[1].set_title("Test")
+#plt.colorbar(im1, ax=ax[1])
+
+im2 = ax[2].imshow(diff, cmap="seismic")
+ax[2].set_title("Difference (test - ref)")
+#plt.colorbar(im2, ax=ax[2])
+
+plt.tight_layout()
+plt.show()

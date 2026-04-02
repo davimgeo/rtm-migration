@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Runtime Float64: 29.98s
 Runtime Float32
 
@@ -15,6 +16,15 @@ TODO:
 > testar com o marmousi ✅
 > adicionar check de dispersão numérica / instabilidade
 > add load seismogram logic
+=======
+TODO:
+
+> fazer metodo de comparar 2 arrays ✅
+> derivada segunda da ricker para o rtm, ou derivada segunda 
+para o campo do receptor na hora de correlacionar
+> suavizar com vagarosidade e depois passar para velocidade
+> adicionar check de dispersão numérica / instabilidade
+>>>>>>> 92cf59e (added second derivative)
 > mover plots para outra classe
 > add debug mode
 

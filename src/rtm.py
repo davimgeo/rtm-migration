@@ -73,7 +73,6 @@ class Migration:
     self.snap_id_src = 0
     self.snap_id_rec = self.nsnaps - 1
 
-    self.energy = np.zeros(self.c.nt)
     self.current = 1
 
   def rtm(self):
@@ -85,12 +84,11 @@ class Migration:
       self.define_source_coordinates(isrc)
 
       self.mod.remove_direct_wave_model(self.ix, self.iz)
+      #self.mod.remove_direct_wave_offset(self.ix, self.iz)
 
       for t in range(1, self.c.nt - 1):
 
         self.forward_propagation(t)
-
-        #self.energy[t] = np.sum(self.upre * self.upre)
 
         self.get_src_snaps(t)
 
@@ -106,9 +104,6 @@ class Migration:
 
     if self.c.save_image:
       self.save()
-
-    #plt.loglog(np.arange(self.c.nt), self.energy)
-    #plt.show()
 
   def zero_out_matrices(self):
     self.seis.seismogram.fill(0.0)
@@ -137,7 +132,7 @@ class Migration:
         self.laplacian, self.mod.damp_x,
         self.mod.damp_z, self.inv_dh2,
         self.mdl.nzz, self.mdl.nxx, 
-        self.wl.ricker, self.ix,
+        self.wl.wavelet, self.ix,
         self.iz, self.dh2,
         self.arg, t,
       )
@@ -394,7 +389,7 @@ class Modeling:
         _forward_kernel(
           self.upas, self.upre, self.ufut, self.laplacian,
           self.damp_x, self.damp_z, self.inv_dh2,
-          self.mdl.nzz, self.mdl.nxx, self.wl.ricker,
+          self.mdl.nzz, self.mdl.nxx, self.wl.wavelet,
           self.ix, self.iz, self.dh2, self.arg, t
         )
 
@@ -419,7 +414,7 @@ class Modeling:
         _forward_kernel(
           self.upas, self.upre, self.ufut, self.laplacian,
           self.damp_x, self.damp_z, self.inv_dh2,
-          self.mdl.nzz, self.mdl.nxx, self.wl.ricker,
+          self.mdl.nzz, self.mdl.nxx, self.wl.wavelet,
           self.ix, self.iz, self.dh2, self.arg, t
         )
 
@@ -437,7 +432,7 @@ class Modeling:
         _forward_kernel(
           self.upas, self.upre, self.ufut, self.laplacian,
           self.damp_x, self.damp_z, self.inv_dh2,
-          self.mdl.nzz, self.mdl.nxx, self.wl.ricker,
+          self.mdl.nzz, self.mdl.nxx, self.wl.wavelet,
           self.ix, self.iz, self.dh2, self.arg, t
         )
 
@@ -447,7 +442,7 @@ class Modeling:
           self.upas_homo, self.upre_homo, self.ufut_homo, 
           self.laplacian_homo, self.damp_x, self.damp_z, 
           self.inv_dh2, self.mdl.nzz, self.mdl.nxx, 
-          self.wl.ricker, self.ix, self.iz, self.dh2, self.arg2, t
+          self.wl.wavelet, self.ix, self.iz, self.dh2, self.arg2, t
         )
 
         self.__get_seismogram(self.seis.seismogram_homo, self.upre_homo, t)
@@ -556,7 +551,7 @@ class Wavelet:
   def __init__(self, c):
     self.c = c
 
-    self.ricker = np.zeros(self.c.nt)
+    self.wavelet = np.zeros(self.c.nt)
 
   def get_ricker(self):
     fc = self.c.fmax / (3.0 * np.sqrt(np.pi))
@@ -564,7 +559,43 @@ class Wavelet:
 
     arg = np.pi * (t * fc * np.pi) ** 2.0 
 
-    self.ricker = (1.0 - 2.0 * arg) * np.exp(-arg)
+    self.wavelet = (1.0 - 2.0 * arg) * np.exp(-arg)
+
+  def second_derivative(self):
+    inv_dh = 1.0 / (12.0 * self.c.dt * self.c.dt)
+
+    d2 = np.zeros_like(self.wavelet)
+
+    for i in range(2, self.c.nt - 2):
+      d2u_dx2 = (
+        - self.wavelet[i-2]
+        + 16.0 * self.wavelet[i-1]
+        - 30.0 * self.wavelet[i]
+        + 16.0 * self.wavelet[i+1]
+        - self.wavelet[i+2]
+      ) * inv_dh
+
+      d2[i] = d2u_dx2 
+
+    self.wavelet = d2
+
+  def plot(self):
+    
+    tloc = np.linspace(0, self.c.nt - 1, 11, dtype=int)
+    tlab = np.around(tloc * self.c.dt, decimals=1)
+
+    fig, ax = plt.subplots(nrows=1, ncols=1)
+
+    ax.plot(self.wavelet)
+
+    ax.set_xlabel("Time [s]", fontsize=13)
+    ax.set_ylabel("Amplitude", fontsize=13)
+
+    ax.set_xticks(tloc)
+    ax.set_xticklabels(tlab)
+
+    plt.tight_layout()
+    plt.show()
 
 class Seismogram:
   def __init__(self, geom, c):
