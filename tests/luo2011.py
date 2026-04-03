@@ -198,7 +198,6 @@ class SmoothCircle:
 
     elif self.cfg.prop_type == "both":
 
-<<<<<<< HEAD
       l2_norm = (self.l2 - self.l2.min()) / (self.l2.max() - self.l2.min())
       l1_norm = (self.l1 - self.l1.min()) / (self.l1.max() - self.l1.min())
 
@@ -210,18 +209,6 @@ class SmoothCircle:
 
       plt.colorbar()
       plt.tight_layout()
-=======
-      if self.cfg.cfg_type == "L1":
-        obj = self.l1
-        obj_norm = (self.l1 - self.l1.min()) / (self.l1.max() - self.l1.min())
-      elif self.cfg.cfg_type == "L2":
-        obj = self.l2
-        obj_norm = (self.l2 - self.l2.min()) / (self.l2.max() - self.l2.min())
-      else:
-        raise KeyError("Choose a valid key. [L1/L2]")
-
-      plt.imshow(obj_norm)
->>>>>>> 92cf59e (added second derivative)
       plt.show()
 
       fig, ax = plt.subplots(
@@ -235,21 +222,12 @@ class SmoothCircle:
         alpha=0.8
       )
 
-<<<<<<< HEAD
       # ax.scatter(
       #   self.cfg.ref_sigma, self.cfg.ref_amp, 0.0,
       #   color='b',
       #   s=50,
       #   label='Reference'
       # )
-=======
-      ax.scatter(
-        0.0, 0.0, 0.0,
-        color='b',
-        s=50,
-        label='Reference: (0.0, 0.0, 0.0)'
-      )
->>>>>>> 92cf59e (added second derivative)
 
       #mask = np.isclose(l2_norm, np.min(l2_norm), atol=1e-6)
 
@@ -265,7 +243,6 @@ class SmoothCircle:
       print(self.cfg.ref_amp * self.cfg.ref_sigma**2)
       print(amp_min * sigma_min**2)
 
-<<<<<<< HEAD
       # ax.scatter(
       #   self.X[i, j],
       #   self.Y[i, j],
@@ -274,15 +251,6 @@ class SmoothCircle:
       #   color='r',
       #   label="Minimum"
       # )
-=======
-      ax.scatter(
-        sigma_min_real,
-        amp_min_real,
-        obj_norm[i, j],
-        s=50,
-        label=f"Minimum Found: {sigma_min_real, amp_min_real, obj_norm[i, j]}"
-      )
->>>>>>> 92cf59e (added second derivative)
 
       fig.colorbar(surf1, shrink=0.5, aspect=5)
 
@@ -292,15 +260,9 @@ class SmoothCircle:
       ax.set_ylabel(r'$\Delta amp$', fontsize=13)
       ax.set_zlabel(self.cfg.cfg_type, fontsize=13)
 
-<<<<<<< HEAD
       ax.view_init(elev=15, azim=4)
 
       #ax.legend(loc="lower right")
-=======
-      ax.view_init(elev=13, azim=-16)
-
-      ax.legend(loc="upper right")
->>>>>>> 92cf59e (added second derivative)
       plt.show()
  
 @dataclass
@@ -312,13 +274,8 @@ class Parameters:
 
   center: tuple = (nz // 2, nx // 2)
 
-<<<<<<< HEAD
   ref_sigma: int = 40
   ref_amp: float = 0.40
-=======
-  ref_sigma: int = 15
-  ref_amp: float = 1.5
->>>>>>> 92cf59e (added second derivative)
 
   varying_range = [0, 80]
   size = 51
@@ -334,35 +291,3 @@ smooth_circle.varying_circles()
 
 #smooth_circle.plot()
 smooth_circle.plot_varying_circles()
-
-<<<<<<< HEAD
-# 20.099999999999998 0.6985
-
-# compare test and smooth_circle.ref_circle_smooth
-
-#ref = smooth_circle.ref_circle_smooth
-#test = smooth_circle._SmoothCircle__smooth_kernel(20.1, 0.6985)
-=======
-ref = smooth_circle.ref_circle_smooth
-test = smooth_circle.smooth_kernel(1.6, 16.0)
->>>>>>> 92cf59e (added second derivative)
-
-diff = test - ref
-
-# ---- Plot ----
-fig, ax = plt.subplots(nrows=3, ncols=1, figsize=(15,5))
-
-im0 = ax[0].imshow(ref, cmap="viridis")
-ax[0].set_title("Reference")
-#plt.colorbar(im0, ax=ax[0])
-
-im1 = ax[1].imshow(test, cmap="viridis")
-ax[1].set_title("Test")
-#plt.colorbar(im1, ax=ax[1])
-
-im2 = ax[2].imshow(diff, cmap="seismic")
-ax[2].set_title("Difference (test - ref)")
-#plt.colorbar(im2, ax=ax[2])
-
-plt.tight_layout()
-plt.show()

@@ -19,6 +19,7 @@ OUTPUT_PATH = "data/output/"
 uncalled = True
 
 class Migration:
+
   def __init__(
     self, c: Config, mod: Modeling, model: Model,
     seis: Seismogram, wl: Wavelet, geom: Geometry
@@ -75,35 +76,35 @@ class Migration:
 
     for isrc in range(len(self.geom.srcxId)):
 
-      self.zero_out_matrices()
+      self.__zero_out_matrices()
 
-      self.define_source_coordinates(isrc)
+      self.__define_source_coordinates(isrc)
 
       self.mod.remove_direct_wave_model(self.ix, self.iz)
 
       for t in range(1, self.c.nt - 1):
 
-        self.forward_propagation(t)
+        self.__forward_propagation(t)
 
-        self.get_src_snaps(t)
+        self.__get_src_snaps(t)
 
       for t in range(self.c.nt - 1, self.tstop, -1):
 
-        self.backward_propagation(t)
+        self.__backward_propagation(t)
 
-        self.accumulate_cross_correlation(t)
+        self.__accumulate_cross_correlation(t)
 
-      self.image_condition()
+      self.__image_condition()
 
-      self.show_modeling_status()
+      self.__show_modeling_status()
 
     if self.c.is_laplacian:
-      self.laplacian_filter()
+      self.__laplacian_filter()
 
     if self.c.save_image:
-      self.save()
+      self.__save()
 
-  def zero_out_matrices(self):
+  def __zero_out_matrices(self):
     self.seis.seismogram.fill(0.0)
 
     self.upas.fill(0.0)
@@ -120,11 +121,11 @@ class Migration:
     self.num.fill(0.0)
     self.den.fill(0.0)
 
-  def define_source_coordinates(self, isrc: int):
+  def __define_source_coordinates(self, isrc: int):
     self.ix = int(self.geom.srcxId[isrc]) + self.c.nb
     self.iz = int(self.geom.srczId[isrc]) + self.c.nb
 
-  def forward_propagation(self, t: int):
+  def __forward_propagation(self, t: int):
       _forward_kernel(
         self.upas, self.upre, self.ufut,
         self.laplacian, self.mod.damp_x,
@@ -135,12 +136,12 @@ class Migration:
         self.arg, t,
       )
 
-  def get_src_snaps(self, t: int):
+  def __get_src_snaps(self, t: int):
     if t >= self.tstop and not t % self.snap_ratio:
       self.snapshots_src[self.snap_id_src] = self.upre.copy()
       self.snap_id_src += 1
 
-  def backward_propagation(self, t: int):
+  def __backward_propagation(self, t: int):
     _backward_kernel(
       self.depas, self.depre, self.defut,
       self.laplacian, self.mod.damp_x, self.mod.damp_z,
@@ -149,7 +150,7 @@ class Migration:
       self.seis.seismogram, t
     )
 
-  def accumulate_cross_correlation(self, t: int, epsilon=1e-9):
+  def __accumulate_cross_correlation(self, t: int, epsilon=1e-9):
     if t % self.snap_ratio:
       idx = int((t - self.tstop) / self.snap_ratio)
 
@@ -159,7 +160,7 @@ class Migration:
       self.num += src * rec
       #self.den += src * src
 
-  def image_condition(self):
+  def __image_condition(self):
     self.image += self.dt_snaps * self.num
     #self.image += self.dt_snaps * (self.num / (self.den + 1e-9))
 
@@ -168,7 +169,7 @@ class Migration:
       self.snapshots_rec[self.snap_id_rec] = self.depre.copy()
       self.snap_id_rec -= 1
 
-  def laplacian_filter(self):
+  def __laplacian_filter(self):
     inv_dh = 1.0 / (12.0 * self.c.dh * self.c.dh)
 
     for i in range(2, self.mdl.nzz - 2):
@@ -193,7 +194,7 @@ class Migration:
 
     self.image = self.gradient
 
-  def save(self, path=None):
+  def __save(self, path=None):
     if path is None:
       path = (
         OUTPUT_PATH +
@@ -213,7 +214,7 @@ class Migration:
     except OSError as e:
       raise OSError(f"Could not save file: {path}") from e
     
-  def show_modeling_status(self):
+  def __show_modeling_status(self):
     system("clear")
     progress = self.current/len(self.geom.srcxId)
     bar = 10 * "██"

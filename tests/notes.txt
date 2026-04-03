@@ -1,5 +1,6 @@
 TODO:
 
+> adicionar comentários 
 > suavizar com vagarosidade e depois passar para velocidade
 > adicionar check de dispersão numérica / instabilidade
 > add load seismogram logic

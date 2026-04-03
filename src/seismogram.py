@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
   from src import Config, Geometry
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 OUTPUT_PATH = "data/output/"
@@ -17,10 +18,11 @@ class Seismogram:
 
     self.seismogram_homo = np.zeros((self.c.nt, self.geom.nrec))
 
+    self.direct_wave = np.array([])
+
+    # WARNING: not implemented yet
     if self.c.seismogram_mode.upper() == "LOAD":
       self.load()
-
-    self.direct_wave = np.array([])
 
   def load(self, input_path=None):
     if input_path is None:

@@ -23,6 +23,8 @@ def main():
   modeling = Modeling(config, model, geom, seis, wavelet)
   modeling.get_damp()
 
+  # botar if else GPU na main
+
   migration = Migration(config, modeling, model, seis, wavelet, geom)
   migration.rtm()  
 
