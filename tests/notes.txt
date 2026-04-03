@@ -1,0 +1,11 @@
+TODO:
+
+> suavizar com vagarosidade e depois passar para velocidade
+> adicionar check de dispersão numérica / instabilidade
+> add load seismogram logic
+> add debug mode
+
+Debug Mode Ideas:
+> plotar sismograma com e sem onda direta
+> decaimento de energia
+> plotar damp

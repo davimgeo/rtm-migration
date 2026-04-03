@@ -6,6 +6,8 @@ debug = false
 [RTM]
 save = true
 
+laplacian = true
+
 # ------------------------ Modeling -------------------------
 [Modeling]
 dh = 10.0
@@ -30,7 +32,7 @@ perc = 95
 
 # -------------------------- Model --------------------------
 [Model]
-mode = "load" # Keys: create/load
+mode = "create" # Keys: create/load
 
 [Model.load]
 nx = 1701
@@ -49,10 +51,10 @@ mode = "create" # Keys: create/load
 
 [Geometry.load]
 receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources40_marmousi.txt"
+sources = "data/input/geometry/sources22.txt"
 
 [Geometry.create]
-offset = 15
+offset = 5
 receiversDepth = 0
 
 # ------------------------- Wavelet -------------------------

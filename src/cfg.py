@@ -11,6 +11,7 @@ class Parameters:
 
   # RTM 
   save_image: bool = field(default=False, metadata={"toml": "RTM.save"})
+  is_laplacian: bool = field(default=False, metadata={"toml": "RTM.laplacian"})
 
   # Modeling
   dh: float = field(default=0.0, metadata={"toml": "Modeling.dh"})

@@ -12,35 +12,27 @@ def main():
   model = Model(config, geom)
   model.get()
   model.set_boundary()
-  model.gaussian_smooth(sigma=10)
-  model.plot_model_and_geometry(model.model_smooth)
+  model.gaussian_smooth(sigma=3)
 
   wavelet = Wavelet(config)
-  wavelet.get_ricker()
+  wavelet.get()
   wavelet.second_derivative()
-  wavelet.plot()
 
-  seis = Seismogram(geom, config)
+  seis = Seismogram(config, geom)
 
-  modeling = Modeling(
-    config, model, geom, seis, wavelet
-  )
+  modeling = Modeling(config, model, geom, seis, wavelet)
   modeling.get_damp()
 
-  migration = Migration(
-    model, geom, seis, 
-    config, wavelet, modeling
-  )
+  migration = Migration(config, modeling, model, seis, wavelet, geom)
   migration.rtm()  
-  migration.laplacian_filter()
 
   return migration, model
 
 if __name__ == "__main__":
   migration, model = main()
 
-  model.plot_model_and_geometry(model.model_smooth)
-  migration.plot(gradient=True)
+  model.plot(model.model_smooth)
+  migration.plot()
 
 
 
