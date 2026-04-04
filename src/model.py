@@ -105,8 +105,8 @@ class Model:
 
       img = ax.imshow(
           model[
-              self.c.nb:self.c.nb + self.c.nz,
-              self.c.nb:self.c.nb + self.c.nx
+            self.c.nb:self.c.nb + self.c.nz,
+            self.c.nb:self.c.nb + self.c.nx
           ],
           aspect="auto",
           cmap="jet",

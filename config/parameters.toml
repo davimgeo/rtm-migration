@@ -4,7 +4,7 @@ debug = false
 
 # --------------------------- RTM ---------------------------
 [RTM]
-save = true
+save = false
 
 laplacian = true
 
@@ -51,10 +51,10 @@ mode = "create" # Keys: create/load
 
 [Geometry.load]
 receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources22.txt"
+sources = "data/input/geometry/sources7.txt"
 
 [Geometry.create]
-offset = 5
+offset = 15
 receiversDepth = 0
 
 # ------------------------- Wavelet -------------------------

@@ -4,7 +4,8 @@ PATH = "config/parameters.toml"
 
 @measure_runtime
 def main():
-  config = Config(PATH).load()
+  config = Config(PATH)
+  config.load()
 
   geom = Geometry(config)
   geom.get()

@@ -1,86 +1,78 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+
+from dataclasses import dataclass, field
+from os import system
+from typing import TYPE_CHECKING, Tuple
+
+import matplotlib.pyplot as plt
+from matplotlib import animation
+import numpy as np
+from numba import njit, prange
 
 if TYPE_CHECKING:
   from src import (
-    Config, Modeling, Model, 
-    Seismogram, Wavelet, Geometry
+    Config,
+    Geometry,
+    Modeling,
+    Model,
+    Seismogram,
+    Wavelet,
   )
-
-from os import system
-
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import animation
-from numba import njit, prange
 
 OUTPUT_PATH = "data/output/"
 
 uncalled = True
 
 class Migration:
-
   def __init__(
-    self, c: Config, mod: Modeling, model: Model,
-    seis: Seismogram, wl: Wavelet, geom: Geometry
-  ) -> None:
+    self, config: Config, 
+    modeling: Modeling, 
+    model: Model, 
+    seismogram: Seismogram, 
+    wavelet: Wavelet, 
+    geometry: Geometry
+) -> None:
+
+    self.c = config
+    self.m = model
+    self.g = geometry
+    self.md = modeling
+    self.s = seismogram
+    self.w = wavelet
     
-    self.mdl = model
-    self.geom = geom
-    self.seis = seis
-    self.wl = wl
-    self.mod = mod
-    self.c = c
+    shape = (model.nzz, model.nxx)
 
-    shape = (self.mdl.nzz, self.mdl.nxx)
-
-    self.upas = np.zeros(shape)
-    self.upre = np.zeros(shape)
-    self.ufut = np.zeros(shape)
-
+    self.u = Wavefield(shape)  
+    self.d = Wavefield(shape)
     self.laplacian = np.zeros(shape)
-
-    self.depas = np.zeros(shape)
-    self.depre = np.zeros(shape)
-    self.defut = np.zeros(shape)
-
-    self.dh2 = self.c.dh * self.c.dh
-    self.inv_dh2 = 1.0 / (5040.0 * self.dh2)
-    self.arg = self.c.dt**2 * self.mdl.model_smooth**2
-
-    self.tstop = int(1.7 * (self.c.tlag / self.c.dt))
-
-    if self.c.snap_num_nyquist:
-      self.snap_ratio = int(1 / (4 * self.c.fmax * self.c.dt))
-    else:
-      self.snap_ratio = int(self.c.nt / self.c.snap_num)
-
-    self.nsnaps = int((self.c.nt - self.tstop - 1) / (self.snap_ratio)) + 1
-    self.dt_snaps = self.snap_ratio * self.c.dt
-
-    self.snapshots_src = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
-    self.snapshots_rec = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
-
+    
     self.image = np.zeros(shape)
     self.gradient = np.zeros(shape)
 
+    self.num = np.zeros(shape)
+    self.den = np.zeros(shape)
+
+    dh2 = config.dh**2
+    self.kernel_args = KernelArguments(
+      dh2=dh2,
+      inv_dh2=1.0 / (5040.0 * dh2),
+      velocity_term=config.dt**2 * model.model_smooth**2
+    )
+
+    self.snaps = SnapshotManager.from_config(config, shape)
+    
     self.ix, self.iz = 0, 0
-    self.num, self.den = np.zeros(shape), np.zeros(shape)
-
-    self.snap_id_src = 0
-    self.snap_id_rec = self.nsnaps - 1
-
-    self.current = 1
+    self.current_step = 1
 
   def rtm(self):
 
-    for isrc in range(len(self.geom.srcxId)):
+    for isrc in range(len(self.g.srcxId)):
 
       self.__zero_out_matrices()
 
       self.__define_source_coordinates(isrc)
 
-      self.mod.remove_direct_wave_model(self.ix, self.iz)
+      self.md.remove_direct_wave_model(self.ix, self.iz)
 
       for t in range(1, self.c.nt - 1):
 
@@ -88,7 +80,7 @@ class Migration:
 
         self.__get_src_snaps(t)
 
-      for t in range(self.c.nt - 1, self.tstop, -1):
+      for t in range(self.c.nt - 1, self.snaps.tstop, -1):
 
         self.__backward_propagation(t)
 
@@ -105,89 +97,89 @@ class Migration:
       self.__save()
 
   def __zero_out_matrices(self):
-    self.seis.seismogram.fill(0.0)
+    self.s.seismogram.fill(0.0)
 
-    self.upas.fill(0.0)
-    self.upre.fill(0.0)
-    self.ufut.fill(0.0)
+    self.u.past.fill(0.0)
+    self.u.present.fill(0.0)
+    self.u.future.fill(0.0)
 
-    self.depas.fill(0.0)
-    self.depre.fill(0.0)
-    self.defut.fill(0.0)
+    self.d.past.fill(0.0)
+    self.d.present.fill(0.0)
+    self.d.future.fill(0.0)
 
-    self.snap_id_src = 0
-    self.snap_id_rec = self.nsnaps - 1
+    self.snaps.current_src_id = 0
+    self.snaps.current_rec_id = self.snaps.nsnaps - 1
 
     self.num.fill(0.0)
     self.den.fill(0.0)
 
   def __define_source_coordinates(self, isrc: int):
-    self.ix = int(self.geom.srcxId[isrc]) + self.c.nb
-    self.iz = int(self.geom.srczId[isrc]) + self.c.nb
+    self.ix = int(self.g.srcxId[isrc]) + self.c.nb
+    self.iz = int(self.g.srczId[isrc]) + self.c.nb
 
   def __forward_propagation(self, t: int):
-      _forward_kernel(
-        self.upas, self.upre, self.ufut,
-        self.laplacian, self.mod.damp_x,
-        self.mod.damp_z, self.inv_dh2,
-        self.mdl.nzz, self.mdl.nxx, 
-        self.wl.wavelet, self.ix,
-        self.iz, self.dh2,
-        self.arg, t,
-      )
+    _forward_kernel(
+      self.u.past, self.u.present, self.u.future,
+      self.laplacian, self.md.damp_x,
+      self.md.damp_z, self.kernel_args.inv_dh2,
+      self.m.nzz, self.m.nxx, 
+      self.w.wavelet, self.ix,
+      self.iz, self.kernel_args.dh2,
+      self.kernel_args.velocity_term, t,
+    )
 
   def __get_src_snaps(self, t: int):
-    if t >= self.tstop and not t % self.snap_ratio:
-      self.snapshots_src[self.snap_id_src] = self.upre.copy()
-      self.snap_id_src += 1
+    if t >= self.snaps.tstop and not t % self.snaps.ratio:
+      self.snaps.src[self.snaps.current_src_id] = self.u.present.copy()
+      self.snaps.current_src_id += 1
 
   def __backward_propagation(self, t: int):
     _backward_kernel(
-      self.depas, self.depre, self.defut,
-      self.laplacian, self.mod.damp_x, self.mod.damp_z,
-      self.inv_dh2, self.mdl.nzz, self.mdl.nxx, self.dh2,
-      self.arg, self.geom.recx, self.geom.recz, self.c.nb,
-      self.seis.seismogram, t
+      self.d.past, self.d.present, self.d.future,
+      self.laplacian, self.md.damp_x, self.md.damp_z,
+      self.kernel_args.inv_dh2, self.m.nzz, self.m.nxx, self.kernel_args.dh2,
+      self.kernel_args.velocity_term, self.g.recx, self.g.recz, self.c.nb,
+      self.s.seismogram, t
     )
 
   def __accumulate_cross_correlation(self, t: int, epsilon=1e-9):
-    if t % self.snap_ratio:
-      idx = int((t - self.tstop) / self.snap_ratio)
+    if t % self.snaps.ratio:
+      idx = int((t - self.snaps.tstop) / self.snaps.ratio)
 
-      src = self.snapshots_src[idx]
-      rec = self.depre
+      src = self.snaps.src[idx]
+      rec = self.d.present
 
       self.num += src * rec
       #self.den += src * src
 
   def __image_condition(self):
-    self.image += self.dt_snaps * self.num
+    self.image += self.snaps.dt * self.num
     #self.image += self.dt_snaps * (self.num / (self.den + 1e-9))
 
   def __get_rc_snaps(self, t: int):
-    if not t % self.snap_ratio:
-      self.snapshots_rec[self.snap_id_rec] = self.depre.copy()
-      self.snap_id_rec -= 1
+    if not t % self.snaps.ratio:
+      self.snaps.rec[self.snaps.current_rec_id] = self.d.present.copy()
+      self.snaps.current_rec_id -= 1
 
   def __laplacian_filter(self):
     inv_dh = 1.0 / (12.0 * self.c.dh * self.c.dh)
 
-    for i in range(2, self.mdl.nzz - 2):
-      for j in range(2, self.mdl.nxx - 2):
+    for i in range(2, self.m.nzz - 2):
+      for j in range(2, self.m.nxx - 2):
         d2u_dx2 = (
-            - self.image[i-2, j]
-            + 16.0 * self.image[i-1, j]
-            - 30.0 * self.image[i, j]
-            + 16.0 * self.image[i+1, j]
-            - self.image[i+2, j]
+          - self.image[i-2, j]
+          + 16.0 * self.image[i-1, j]
+          - 30.0 * self.image[i, j]
+          + 16.0 * self.image[i+1, j]
+          - self.image[i+2, j]
         ) * inv_dh
 
         d2u_dz2 = (
-            - self.image[i, j-2]
-            + 16.0 * self.image[i, j-1]
-            - 30.0 * self.image[i, j]
-            + 16.0 * self.image[i, j+1]
-            - self.image[i, j+2]
+          - self.image[i, j-2]
+          + 16.0 * self.image[i, j-1]
+          - 30.0 * self.image[i, j]
+          + 16.0 * self.image[i, j+1]
+          - self.image[i, j+2]
         ) * inv_dh
 
         self.gradient[i, j] = d2u_dx2 + d2u_dz2
@@ -198,7 +190,7 @@ class Migration:
     if path is None:
       path = (
         OUTPUT_PATH +
-          f"image_{self.nsnaps}snaps" +
+          f"image_{self.snaps.nsnaps}snaps" +
           f"_{self.c.nx}x{self.c.nz}.bin"
       )
 
@@ -216,10 +208,10 @@ class Migration:
     
   def __show_modeling_status(self):
     system("clear")
-    progress = self.current/len(self.geom.srcxId)
+    progress = self.current_step / len(self.g.srcxId)
     bar = 10 * "██"
     print(f"\n Shots: {round(100 * progress, 2)}% | {bar[:int((10.0 * progress))]} |")
-    self.current += 1
+    self.current_step += 1
 
   def plot_snapshots(self, snapshots: np.ndarray) -> None:
     xloc = np.linspace(0, self.c.nx-1, 11, dtype=int)
@@ -235,7 +227,7 @@ class Migration:
       scale = 2.0 * np.std(snap)
 
       model_frame = ax.imshow(
-        self.mdl.model[self.c.nb:self.c.nb+self.c.nz,
+        self.m.model[self.c.nb:self.c.nb+self.c.nz,
                              self.c.nb:self.c.nb+self.c.nx],
         aspect="auto", cmap="jet", alpha=0.5
       )
@@ -247,8 +239,8 @@ class Migration:
         vmin=-scale, vmax=scale, alpha=0.7
       )
 
-      ax.plot(self.geom.recx, self.geom.recz, 'bv')
-      ax.plot(self.geom.srcxId, self.geom.srczId, 'r*')
+      ax.plot(self.g.recx, self.g.recz, 'bv')
+      ax.plot(self.g.srcxId, self.g.srczId, 'r*')
 
       ims.append([model_frame, snap_frame])
 
@@ -280,22 +272,22 @@ class Migration:
     zloc = np.linspace(0, self.c.nz - 1, 7, dtype=int)
     zlab = np.array(zloc * self.c.dh, dtype=int)
 
-    _, ax = plt.subplots(figsize=(12, 5))
+    fig, ax = plt.subplots(figsize=(12, 5)) 
 
     img_data = self.image[
-      self.c.nb:self.c.nb + self.c.nz,
-      self.c.nb:self.c.nb + self.c.nx
+        self.c.nb:self.c.nb + self.c.nz,
+        self.c.nb:self.c.nb + self.c.nx
     ]
 
     vmin = np.percentile(img_data, 100 - perc)
     vmax = np.percentile(img_data, perc)
 
     img = ax.imshow(
-      img_data,
-      aspect="auto",
-      cmap="Greys",
-      vmin=vmin,
-      vmax=vmax
+        img_data,
+        aspect="auto",
+        cmap="Greys",
+        vmin=vmin,
+        vmax=vmax
     )
 
     ax.set_xticks(xloc)
@@ -309,6 +301,61 @@ class Migration:
 
     plt.colorbar(img, ax=ax)
     plt.show()
+
+
+@dataclass(slots=True)
+class Wavefield:
+  shape: Tuple[int, int]
+  past: np.ndarray = field(init=False)
+  present: np.ndarray = field(init=False)
+  future: np.ndarray = field(init=False)
+
+  def __post_init__(self):
+    self.past = np.zeros(self.shape)
+    self.present = np.zeros(self.shape)
+    self.future = np.zeros(self.shape)
+
+
+@dataclass(slots=True)
+class KernelArguments:
+  dh2: float
+  inv_dh2: float
+  velocity_term: np.ndarray  
+
+
+@dataclass(slots=True)
+class SnapshotManager:
+  nsnaps: int
+  tstop: int
+  ratio: int
+  dt: float
+  src: np.ndarray
+  rec: np.ndarray
+  
+  # internal counters
+  current_src_id: int = 0
+  current_rec_id: int = 0
+
+  @classmethod
+  def from_config(cls, c, shape):
+    tstop = int(1.7 * (c.tlag / c.dt))
+    
+    if c.snap_num_nyquist:
+      ratio = int(1 / (4 * c.fmax * c.dt))
+    else:
+      ratio = int(c.nt / c.snap_num)
+
+    nsnaps = int((c.nt - tstop - 1) / ratio) + 1
+    
+    return cls(
+      nsnaps=nsnaps,
+      tstop=tstop,
+      ratio=ratio,
+      dt=ratio * c.dt,
+      src=np.zeros((nsnaps, *shape)),
+      rec=np.zeros((nsnaps, *shape)),
+      current_rec_id=nsnaps - 1
+    )
 
 @njit(parallel=True, fastmath=True)
 def _forward_kernel(

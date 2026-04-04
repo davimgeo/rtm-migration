@@ -1,5 +1,7 @@
 TODO:
 
+> nb = comprimento de onda * 4
+> ativar 72 receptores por vez(ou um numero escolhido) para gerar sismograma
 > adicionar comentários 
 > suavizar com vagarosidade e depois passar para velocidade
 > adicionar check de dispersão numérica / instabilidade

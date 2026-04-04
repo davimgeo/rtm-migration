@@ -56,7 +56,7 @@ class Config(Parameters):
 
     self.toml_path = toml_path 
 
-  def load(self) -> Parameters:
+  def load(self):
     with open(self.toml_path, "rb") as f:
       data = tomllib.load(f)
 
@@ -66,7 +66,7 @@ class Config(Parameters):
       try:
         value = self.get_nested(data, metadata)
         setattr(self, f.name, value)
-      except KeyError as e:
+      except KeyError:
         pass
 
     self.manage_modes_attributes()
@@ -75,8 +75,7 @@ class Config(Parameters):
   
   def get_nested(self, root: dict, path: str) -> dict:
     """
-    Loop through a nested dictionary
-    and returns the value of the node
+    Loop through a nested dictionary and returns the value of the node
     """
     node = root
     for key in path.split("."):

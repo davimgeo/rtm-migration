@@ -1,6 +1,5 @@
-import sys
-import os
 from pathlib import Path
+import sys, os
 
 PARENT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PARENT_DIR))

@@ -1,100 +1,100 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-  from src import (
-    Config, Modeling, Model, 
-    Seismogram, Wavelet, Geometry
-  )
+from dataclasses import dataclass, field
 
 from os import system
+from typing import TYPE_CHECKING, Tuple
+
+from numpy import numpy.float32
+import cupy as cp
+
+if TYPE_CHECKING:
+    from src import (
+        Config,
+        Modeling,
+        Model,
+        Seismogram,
+        Wavelet,
+        Geometry,
+    )
 
 from src import Migration
 
-import cupy as cp
-from numba import njit, prange
-
 OUTPUT_PATH = "data/output/"
-
-uncalled = True
 
 class MigrationGPU(Migration):
   def __init__(
-    self, c: Config, mod: Modeling, model: Model,
-    seis: Seismogram, wl: Wavelet, geom: Geometry
-  ) -> None:
+    self, config: Config, 
+    modeling: Modeling, 
+    model: Model, 
+    seismogram: Seismogram, 
+    wavelet: Wavelet, 
+    geometry: Geometry
+) -> None:
+
+    self.c = config
+    self.m = model
+    self.g = geometry
+    self.md = modeling
+    self.s = seismogram
+    self.w = wavelet
     
-    self.mdl = model
-    self.geom = geom
-    self.seis = seis
-    self.wl = wl
-    self.mod = mod
-    self.c = c
+    shape = (model.nzz, model.nxx)
 
-    shape = (self.mdl.nzz, self.mdl.nxx)
+    self.u = Wavefield(shape)
+    self.d = Wavefield(shape)
 
-    self.upas = cp.zeros(shape)
-    self.upre = cp.zeros(shape)
-    self.ufut = cp.zeros(shape)
+    self.laplacian = cp.zeros(shape, dtype=cp.float32)
+    self.image = cp.zeros(shape, dtype=cp.float32)
+    self.gradient = cp.zeros(shape, dtype=cp.float32)
+    self.num = cp.zeros(shape, dtype=cp.float32)
+    self.den = cp.zeros(shape, dtype=cp.float32)
 
-    self.laplacian = cp.zeros(shape)
+    dh2 = config.dh**2
 
-    self.depas = cp.zeros(shape)
-    self.depre = cp.zeros(shape)
-    self.defut = cp.zeros(shape)
+    velocity_term = cp.asarray(model.model_smooth, dtype=cp.float32)
+    velocity_term = (config.dt**2) * velocity_term**2
 
-    self.dh2 = self.c.dh * self.c.dh
-    self.inv_dh2 = 1.0 / (5040.0 * self.dh2)
-    self.arg = self.c.dt**2 * self.mdl.model_smooth**2
+    self.kernel_args = KernelArguments(
+    dh2=cp.float32(dh2),
+    inv_dh2=cp.float32(1.0 / (5040.0 * dh2)),
+    velocity_term=velocity_term
+    )
 
-    self.tstop = int(1.7 * (self.c.tlag / self.c.dt))
+    self.snaps = SnapshotManager.from_config(config, shape)
+    self.snap_idx = cp.arange(self.snaps.tstop, config.nt - 1, self.snaps.ratio)
 
-    if self.c.snap_num_nyquist:
-      self.snap_ratio = int(1 / (4 * self.c.fmax * self.c.dt))
-    else:
-      self.snap_ratio = int(self.c.nt / self.c.snap_num)
+    self.block = (16, 16)
+    self.grid = ((model.nxx + self.block[0] - 1) // self.block[0],
+                (model.nzz + self.block[1] - 1) // self.block[1]) 
 
-    self.nsnaps = int((self.c.nt - self.tstop - 1) / (self.snap_ratio)) + 1
-    self.dt_snaps = self.snap_ratio * self.c.dt
+    # copying into device
+    self.ricker_gpu = cp.asarray(self.w.wavelet)
+    self.damp_x_gpu = cp.asarray(self.md.damp_x)
+    self.damp_z_gpu = cp.asarray(self.md.damp_z)
+    self.recx_gpu = cp.asarray(self.g.recx)
+    self.recz_gpu = cp.asarray(self.g.recz)
+    self.seismogram_gpu = cp.asarray(self.s.seismogram)
 
-    self.snapshots_src = cp.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
-
-    self.image = cp.zeros(shape)
-    self.gradient = cp.zeros(shape)
-
+    # internal counters
     self.ix, self.iz = 0, 0
-    self.num, self.den = cp.zeros(shape), cp.zeros(shape)
-
-    self.snap_id_src = 0
-    self.snap_id_rec = self.nsnaps - 1
-
-    self.current = 1
+    self.current_step = 1
 
   def rtm(self):
+    for isrc in range(len(self.g.srcxId)):
+        self.zero_out_matrices()
 
-    for isrc in range(len(self.geom.srcxId)):
+        self.define_source_coordinates(isrc)
 
-      self.zero_out_matrices()
+        self.md.remove_direct_wave_model()
 
-      self.define_source_coordinates(isrc)
+        self.forward_propagation()
 
-      self.mod.remove_direct_wave_model(self.ix, self.iz)
+        self.backward_propagation()
 
-      for t in range(1, self.c.nt - 1):
+        self.image_condition()
 
-        self.forward_propagation(t)
-
-        self.get_src_snaps(t)
-
-      for t in range(self.c.nt - 1, self.tstop, -1):
-
-        self.backward_propagation(t)
-
-        self.accumulate_cross_correlation(t)
-
-      self.image_condition()
-
-      self.show_modeling_status()
+        self.show_modeling_status()
 
     if self.c.is_laplacian:
       self.laplacian_filter()
@@ -103,70 +103,61 @@ class MigrationGPU(Migration):
       self.save()
 
   def zero_out_matrices(self):
-    self.seis.seismogram.fill(0.0)
+    self.s.seismogram.fill(0.0)
 
-    self.upas.fill(0.0)
-    self.upre.fill(0.0)
-    self.ufut.fill(0.0)
+    self.u.past.fill(0.0)
+    self.u.present.fill(0.0)
+    self.u.future.fill(0.0)
 
-    self.depas.fill(0.0)
-    self.depre.fill(0.0)
-    self.defut.fill(0.0)
+    self.d.past.fill(0.0)
+    self.d.present.fill(0.0)
+    self.d.future.fill(0.0)
 
     self.snap_id_src = 0
-    self.snap_id_rec = self.nsnaps - 1
 
     self.num.fill(0.0)
-    self.den.fill(0.0)
+    #self.den.fill(0.0)
 
   def define_source_coordinates(self, isrc: int):
-    self.ix = int(self.geom.srcxId[isrc]) + self.c.nb
-    self.iz = int(self.geom.srczId[isrc]) + self.c.nb
+    self.ix = int(self.g.srcxId[isrc]) + self.c.nb
+    self.iz = int(self.g.srczId[isrc]) + self.c.nb
 
-  def forward_propagation(self, t: int):
-      _forward_kernel(
-        self.upas, self.upre, self.ufut,
-        self.laplacian, self.mod.damp_x,
-        self.mod.damp_z, self.inv_dh2,
-        self.mdl.nzz, self.mdl.nxx, 
-        self.wl.wavelet_derivative, self.ix,
-        self.iz, self.dh2,
-        self.arg, t,
-      )
-
-  def get_src_snaps(self, t: int):
-    if t >= self.tstop and not t % self.snap_ratio:
-      self.snapshots_src[self.snap_id_src] = self.upre.copy()
-      self.snap_id_src += 1
-
-  def backward_propagation(self, t: int):
-    _backward_kernel(
-      self.depas, self.depre, self.defut,
-      self.laplacian, self.mod.damp_x, self.mod.damp_z,
-      self.inv_dh2, self.mdl.nzz, self.mdl.nxx, self.dh2,
-      self.arg, self.geom.recx, self.geom.recz, self.c.nb,
-      self.seis.seismogram, t
+  def forward_propagation(self):
+    _forward_kernel(self.grid, self.block, (
+            self.u.past, self.u.present, self.u.future, self.laplacian, 
+            self.damp_x_gpu, self.damp_z_gpu, self.kernel_args.inv_dh2, 
+            self.m.nzz, self.m.nxx, self.ricker_gpu, self.ix, self.iz,
+            self.kernel_args.dh2, self.kernel_args.velocity_term, self.c.nt,
+            self.snaps.ratio, self.snaps.src
+        )
     )
 
-  def accumulate_cross_correlation(self, t: int, epsilon=1e-9):
-    if t % self.snap_ratio:
-      idx = int((t - self.tstop) / self.snap_ratio)
-
-      src = self.snapshots_src[idx]
-      rec = self.depre
-
-      self.num += src * rec
-      #self.den += src * src
+  def backward_propagation(self):
+    _backward_kernel(self.grid, self.block, (
+            self.d.past, self.d.present, self.d.future, self.laplacian, 
+            self.damp_x_gpu, self.damp_z_gpu, self.kernel_args.inv_dh2, 
+            self.m.nzz, self.m.nxx, self.kernel_args.dh2, self.kernel_args.velocity_term,
+            self.recx_gpu, self.recz_gpu, self.c.nb, self.seismogram_gpu, self.g.nrec,
+            self.snaps.tstop, self.snaps.ratio
+        )
+    )
 
   def image_condition(self):
-    self.image += self.dt_snaps * self.num
-    #self.image += self.dt_snaps * (self.num / (self.den + 1e-9))
+    _image_kernel(
+        self.grid,
+        self.block,
+        (
+            self.image,
+            self.num,
+            self.snaps.dt
+        )
+    )
 
   def laplacian_filter(self):
     inv_dh = 1.0 / (12.0 * self.c.dh * self.c.dh)
 
-    for i in range(2, self.mdl.nzz - 2):
-      for j in range(2, self.mdl.nxx - 2):
+    for i in range(2, self.m.nzz - 2):
+      for j in range(2, self.m.nxx - 2):
         d2u_dx2 = (
             - self.image[i-2, j]
             + 16.0 * self.image[i-1, j]
@@ -187,128 +178,237 @@ class MigrationGPU(Migration):
 
     self.image = self.gradient
 
-  def save(self, path=None):
-    if path is None:
-      path = (
-        OUTPUT_PATH +
-          f"image_{self.nsnaps}snaps" +
-          f"_{self.c.nx}x{self.c.nz}.bin"
-      )
+@dataclass(slots=True)
+class Wavefield:
+  shape: Tuple[int, int]
+  past: cp.ndarray = field(init=False)
+  present: cp.ndarray = field(init=False)
+  future: cp.ndarray = field(init=False)
 
-    cropped = self.image[
-      self.c.nb:self.c.nb + self.c.nz,
-      self.c.nb:self.c.nb + self.c.nx
-    ]
+  def __post_init__(self):
+    self.past = cp.zeros(self.shape, dtype=cp.float32)
+    self.present = cp.zeros(self.shape, dtype=cp.float32)
+    self.future = cp.zeros(self.shape, dtype=cp.float32)
 
-    try:
-      cropped.flatten('F').astype('float32', order='F').tofile(path)
-      print(f"Successfully saved: {path}")
 
-    except OSError as e:
-      raise OSError(f"Could not save file: {path}") from e
+@dataclass(slots=True)
+class KernelArguments:
+  dh2: float | numpy.float32
+  inv_dh2: float | numpy.float32
+  velocity_term: cp.ndarray  
+
+
+@dataclass(slots=True)
+class SnapshotManager:
+  nsnaps: int
+  tstop: int
+  ratio: int
+  dt: float
+  src: cp.ndarray
+  rec: cp.ndarray
+  
+  # internal counters
+  current_src_id: int = 0
+  current_rec_id: int = 0
+
+  @classmethod
+  def from_config(cls, c, shape):
+    tstop = int(1.7 * (c.tlag / c.dt))
     
-  def show_modeling_status(self):
-    system("clear")
-    progress = self.current/len(self.geom.srcxId)
-    bar = 10 * "██"
-    print(f"\n Shots: {round(100 * progress, 2)}% | {bar[:int((10.0 * progress))]} |")
-    self.current += 1
+    if c.snap_num_nyquist:
+      ratio = int(1 / (4 * c.fmax * c.dt))
+    else:
+      ratio = int(c.nt / c.snap_num)
 
-@njit(parallel=True, fastmath=True)
-def _forward_kernel(
-  upas: cp.ndarray,
-  upre: cp.ndarray,
-  ufut: cp.ndarray,
-  laplacian: cp.ndarray,
-  damp_x: cp.ndarray,
-  damp_z: cp.ndarray,
-  inv_dh2: float,
-  nzz: int,
-  nxx: int,
-  ricker: cp.ndarray,
-  ix: int,
-  iz: int,
-  dh2: float,
-  arg: cp.ndarray,
-  t: int,
-) -> None:
+    nsnaps = int((c.nt - tstop - 1) / ratio) + 1
+    
+    return cls(
+      nsnaps=nsnaps,
+      tstop=tstop,
+      ratio=ratio,
+      dt=cp.float32(ratio * c.dt),
+      src=cp.zeros((nsnaps, *shape)),
+      rec=cp.zeros((nsnaps, *shape)),
+      current_rec_id=nsnaps - 1
+    )
 
-  upre[iz, ix] += ricker[t] / dh2
+_forward_kernel = cp.RawKernel(r'''
+extern "C" __global__
+void forward_kernel(
+   float* upas, float* upre, float* ufut,
+   float* laplacian, float* damp_x, float* damp_z,
+   float inv_dh2, int nzz, int nxx, float* ricker,
+   int ix, int iz, float dh2, float* velocity_term,
+   int nt, int snap_ratio, float* snaps, int tstop
+)
+{
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
 
-  for i in prange(4, nzz - 4):
-    for j in range(4, nxx - 4):
-      d2u_dx2 = (
-        -9.0   * upre[i-4, j] + 128.0   * upre[i-3, j] - 1008.0 * upre[i-2, j] +
-        8064.0 * upre[i-1, j] - 14350.0 * upre[i,   j] + 8064.0 * upre[i+1, j] -
-        1008.0 * upre[i+2, j] + 128.0   * upre[i+3, j] - 9.0    * upre[i+4, j]
-      )
+    if ((t > 1) && (t < nt - 1))
+    {
+        upre[iz, ix] += ricker[t] / dh2;
 
-      d2u_dz2 = (
-        -9.0   * upre[i, j-4] + 128.0   * upre[i, j-3] - 1008.0 * upre[i, j-2] +
-        8064.0 * upre[i, j-1] - 14350.0 * upre[i, j]   + 8064.0 * upre[i, j+1] -
-        1008.0 * upre[i, j+2] + 128.0   * upre[i, j+3] - 9.0    * upre[i, j+4]
-      )
+        int i = blockIdx.y * blockDim.y + threadIdx.y;
+        int j = blockIdx.x * blockDim.y + threadIdx.y;
 
-      laplacian[i, j] = (d2u_dx2 + d2u_dz2) * inv_dh2
+        if ((i > 3 && i < nzz - 4) && (j > 3 && j < nxx - 4))
+        {
+            float d2u_dx2 = (
+                -9.0   * upre[(i-4) * nxx + j] +
+                128.0  * upre[(i-3) * nxx + j] -
+                1008.0 * upre[(i-2) * nxx + j] +
+                8064.0 * upre[(i-1) * nxx + j] -
+                14350.0* upre[(i)   * nxx + j] +
+                8064.0 * upre[(i+1) * nxx + j] -
+                1008.0 * upre[(i+2) * nxx + j] +
+                128.0  * upre[(i+3) * nxx + j] -
+                9.0    * upre[(i+4) * nxx + j]
+            );
 
-  for i in prange(4, nzz - 4):
-    for j in range(4, nxx - 4):
+            float d2u_dz2 = (
+                -9.0   * upre[i * nxx + (j-4)] +
+                128.0  * upre[i * nxx + (j-3)] -
+                1008.0 * upre[i * nxx + (j-2)] +
+                8064.0 * upre[i * nxx + (j-1)] -
+                14350.0* upre[i * nxx + (j)] +
+                8064.0 * upre[i * nxx + (j+1)] -
+                1008.0 * upre[i * nxx + (j+2)] +
+                128.0  * upre[i * nxx + (j+3)] -
+                9.0    * upre[i * nxx + (j+4)]
+            );
 
-      upas[i, j] = arg[i, j] * laplacian[i, j] + 2.0 * upre[i, j] - ufut[i, j]
-      
-      damp = damp_x[j] * damp_z[i]
+            laplacian[i * nxx + j] = (d2u_dx2 + d2u_dz2) * inv_dh2;
+        }
+        
+        int k = blockIdx.y * blockDim.y + threadIdx.y;
+        int l = blockIdx.x * blockDim.x + threadIdx.x;
 
-      ufut[i, j] = upre[i, j] * damp
-      upre[i, j] = upas[i, j] * damp
+        if ((k > 3 && k < nzz - 4) && (l > 3 && l < nxx - 4))
+        {
+            int idx = k * nxx + l;
 
-@njit(parallel=True, fastmath=True)
-def _backward_kernel(
-  depas: cp.ndarray,
-  depre: cp.ndarray,
-  defut: cp.ndarray,
-  laplacian: cp.ndarray,
-  damp_x: cp.ndarray,
-  damp_z: cp.ndarray,
-  inv_dh2: float,
-  nzz: int,
-  nxx: int,
-  dh2: float,
-  arg: cp.ndarray,
-  recx: cp.ndarray,
-  recz: cp.ndarray,
-  nb: int,
-  seismogram: cp.ndarray,
-  t: int,
-) -> None:
+            upas[idx] = arg[idx] * laplacian[idx] + 2.0 * upre[idx] - ufut[idx];
 
-  for irec in prange(len(recx)):
-    rx = int(recx[irec]) + nb
-    rz = int(recz[irec]) + nb
-    depre[rz, rx] += seismogram[t, irec] / dh2
+            float damp = damp_x[l] * damp_z[k];
 
-  for i in prange(4, nzz - 4):
-    for j in range(4, nxx - 4):
-      d2u_dx2 = (
-        -9.0   * depre[i-4, j] + 128.0   * depre[i-3, j] - 1008.0 * depre[i-2, j] +
-        8064.0 * depre[i-1, j] - 14350.0 * depre[i,   j] + 8064.0 * depre[i+1, j] -
-        1008.0 * depre[i+2, j] + 128.0   * depre[i+3, j] - 9.0    * depre[i+4, j]
-      )
+            ufut[idx] = upre[idx] * damp;
+            upre[idx] = upas[idx] * damp;
+        }
 
-      d2u_dz2 = (
-        -9.0   * depre[i, j-4] + 128.0   * depre[i, j-3] - 1008.0 * depre[i, j-2] +
-        8064.0 * depre[i, j-1] - 14350.0 * depre[i, j]   + 8064.0 * depre[i, j+1] -
-        1008.0 * depre[i, j+2] + 128.0   * depre[i, j+3] - 9.0    * depre[i, j+4]
-      )
+        int snap_idx = (t - tstop) / snap_ratio;
 
-      laplacian[i, j] = (d2u_dx2 + d2u_dz2) * inv_dh2
+        int i = blockIdx.y * blockDim.y + threadIdx.y;
+        int j = blockIdx.x * blockDim.y + threadIdx.y;
 
-  for i in prange(4, nzz - 4):
-    for j in range(4, nxx - 4):
-      depas[i, j] = arg[i, j] * laplacian[i, j] + 2.0 * depre[i, j] - defut[i, j]
+        if ((i > 3 && i < nzz - 4) && (j > 3 && j < nxx - 4))
+        {
+            snaps[snap_idx * nzz * nxx + i * nxx + j] = upre[i * nxx + j];    
+        }
+        
+    }
+}
+''', 'forward_kernel')
 
-      damp = damp_x[j] * damp_z[i]
+_backward_kernel = cp.RawKernel(r'''
+extern "C" __global__
+void backward_kernel(
+   float* depas, float* depre, float* defut,
+   float* laplacian, float* damp_x, float* damp_z,
+   float inv_dh2, int nzz, int nxx, float dh2,
+   float* arg, float* recx, float* recz, int nb,
+   float* seismogram, int nrec, int tstop, int snap_ratio
+) 
+{
 
-      defut[i, j] = depre[i, j] * damp
-      depre[i, j] = depas[i, j] * damp
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
 
+    if ((t < nt - 1) && (t > 1))
+    {
 
+        int irec = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (irec < nrec)
+        {
+            int rx = rec[irec] + nb
+            int rz = recz[irec] + nb
+            depre[rz, rx] += seismogram[t, irec] / dh2
+        }
+        
+        int i = blockIdx.y * blockDim.y + threadIdx.y;
+        int j = blockIdx.x * blockDim.y + threadIdx.y;
+
+        if ((i > 3 && i < nzz - 4) && (j > 3 && j < nxx - 4))
+        {
+            float d2u_dx2 = (
+                -9.0   * upre[(i-4) * nxx + j] +
+                128.0  * upre[(i-3) * nxx + j] -
+                1008.0 * upre[(i-2) * nxx + j] +
+                8064.0 * upre[(i-1) * nxx + j] -
+                14350.0* upre[(i)   * nxx + j] +
+                8064.0 * upre[(i+1) * nxx + j] -
+                1008.0 * upre[(i+2) * nxx + j] +
+                128.0  * upre[(i+3) * nxx + j] -
+                9.0    * upre[(i+4) * nxx + j]
+            );
+
+            float d2u_dz2 = (
+                -9.0   * upre[i * nxx + (j-4)] +
+                128.0  * upre[i * nxx + (j-3)] -
+                1008.0 * upre[i * nxx + (j-2)] +
+                8064.0 * upre[i * nxx + (j-1)] -
+                14350.0* upre[i * nxx + (j)] +
+                8064.0 * upre[i * nxx + (j+1)] -
+                1008.0 * upre[i * nxx + (j+2)] +
+                128.0  * upre[i * nxx + (j+3)] -
+                9.0    * upre[i * nxx + (j+4)]
+            );
+
+            laplacian[i * nxx + j] = (d2u_dx2 + d2u_dz2) * inv_dh2;
+        }
+
+        int k = blockIdx.y * blockDim.y + threadIdx.y;
+        int l = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if ((k > 3 && k < nzz - 4) && (l > 3 && l < nxx - 4))
+        {
+            int idx = k * nxx + l;
+
+            depas[idx] = arg[idx] * laplacian[idx] + 2.0 * depre[idx] - defut[idx];
+
+            float damp = damp_x[l] * damp_z[k];
+
+            defut[idx] = depre[idx] * damp;
+            depre[idx] = depas[idx] * damp;
+        }
+
+        int snap_idx = (t - tstop) / snap_ratio;
+
+        int i = blockIdx.y * blockDim.y + threadIdx.y;
+        int j = blockIdx.x * blockDim.y + threadIdx.y;
+
+        if ((i > 3 && i < nzz - 4) && (j > 3 && j < nxx - 4))
+        {
+            float* src = snaps[snap_idx * nzz * nxx + i * nxx + j];  
+            float* rec = depre[i * nxx + j];
+
+            num[i * nxx + j] += src[i * nxx + j] * rec[i * nxx + j]
+        }
+
+    }
+}
+
+''', 'backward_kernel')
+
+_image_kernel = cp.rawKernel(r'''
+extern "C" __global__
+void image_kernel(float* image, float dt, float* numerator)
+{
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+    int j = blockIdx.x * blockDim.y + threadIdx.y;
+
+    if ((i > 3 && i < nzz - 4) && (j > 3 && j < nxx - 4))
+    {
+        image[i * nxx + j] += dt * numerator[i * nxx + j];
+    }
+}
+''', 'image_kernel')

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
   )
 
 import numpy as np
+import matplotlib.pyplot as plt
 from matplotlib import animation
 from numba import njit, prange
 
@@ -65,6 +66,12 @@ class Modeling:
       self.ix, self.iz = ix, iz
 
       for t in range(1, self.c.nt - 1):
+
+        # plane wave
+        #for irec in range(len(self.geom.recx)):
+        #  rx = int(self.geom.recx[irec]) + self.c.nb
+        #  rz = int(self.geom.recz[irec]) + self.c.nb
+        #  self.upre[rz, rx] += self.wl.wavelet[t] / self.dh2
 
         _forward_kernel(
           self.upas, self.upre, self.ufut, self.laplacian,
@@ -246,6 +253,7 @@ def _forward_kernel(
   t: int,
 ) -> None:
 
+  
   upre[iz, ix] += ricker[t] / dh2
 
   for i in prange(4, nzz - 4):
