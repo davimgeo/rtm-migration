@@ -13,7 +13,7 @@ if TYPE_CHECKING:
   from src import (
     Config,
     Geometry,
-    Modeling,
+    Propagation,
     Model,
     Seismogram,
     Wavelet,
@@ -21,12 +21,10 @@ if TYPE_CHECKING:
 
 OUTPUT_PATH = "data/output/"
 
-uncalled = True
-
 class Migration:
   def __init__(
     self, config: Config, 
-    modeling: Modeling, 
+    modeling: Propagation, 
     model: Model, 
     seismogram: Seismogram, 
     wavelet: Wavelet, 

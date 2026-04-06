@@ -1,10 +1,11 @@
 from __future__ import annotations
 from os import system
 
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Tuple
 
 if TYPE_CHECKING:
-  from src import (
+  from . import (
     Config, Model, Seismogram, 
     Wavelet, Geometry
   )
@@ -14,83 +15,71 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 from numba import njit, prange
 
-class Modeling:
+class Propagation:
 
   def __init__(
-      self, c: Config, mdl: Model, geom: Geometry,
-      seis: Seismogram, wl: Wavelet
+      self, config: Config, model: Model, geometry: Geometry,
+      seismogram: Seismogram, wavelet: Wavelet
     ) -> None:
 
-    self.c = c
-    self.seis = seis
-    self.mdl = mdl
-    self.geom = geom
-    self.wl = wl
+    self.c = config
+    self.m = model
+    self.g = geometry
+    self.s = seismogram
+    self.w = wavelet
 
-    shape = (self.mdl.nzz, self.mdl.nxx)
+    shape = (model.nzz, model.nxx)
 
-    self.upas = np.zeros(shape)
-    self.upre = np.zeros(shape)
-    self.ufut = np.zeros(shape)
+    self.u = Wavefield(shape)
+    self.u_homo = Wavefield(shape)
 
     self.laplacian = np.zeros(shape)
-
-    self.dh2 = self.c.dh * self.c.dh
-    self.inv_dh2 = 1.0 / (5040.0 * self.dh2)
-    self.arg = self.c.dt **2 * self.mdl.model**2
-
-    self.upas_homo = np.zeros(shape)
-    self.upre_homo = np.zeros(shape)
-    self.ufut_homo = np.zeros(shape)
-
     self.laplacian_homo = np.zeros(shape)
 
-    model_homo = np.full(shape, 1500)
-    self.arg2 = self.c.dt **2 * model_homo**2
+    model_homo = np.full(shape, 1500.0)
 
-    self.damp_x = np.zeros((self.mdl.nxx))
-    self.damp_z = np.zeros((self.mdl.nzz))
+    self.kernel_arg = KernelArguments.make(
+        config.dh, config.dt, model.model
+      )
+    self.kernel_arg_homo = KernelArguments.make(
+        config.dh, config.dt, model_homo
+    )
+
+    self.damp_x = np.zeros(model.nxx)
+    self.damp_z = np.zeros(model.nzz)
 
     self.nsnaps = 101
-    self.snap_ratio = int((self.c.nt - 1) / self.nsnaps) + 1
+    self.snap_ratio = int((config.nt - 1) / self.nsnaps) + 1
 
-    self.snapshots = np.zeros((self.nsnaps, self.mdl.nzz, self.mdl.nxx))
+    self.snapshots = np.zeros((self.nsnaps, model.nzz, model.nxx))
 
     self.ix, self.iz = 0, 0
-    self.rx = self.geom.recx.astype(int) + self.c.nb
-    self.rz = self.geom.recz.astype(int) + self.c.nb
     self.snap_id_src = 0
-    self.current = 1
 
   def fdm_propagation(self, ix: int, iz: int, isSnap=False) -> None:
       self.ix, self.iz = ix, iz
 
       for t in range(1, self.c.nt - 1):
 
-        # plane wave
-        #for irec in range(len(self.geom.recx)):
-        #  rx = int(self.geom.recx[irec]) + self.c.nb
-        #  rz = int(self.geom.recz[irec]) + self.c.nb
-        #  self.upre[rz, rx] += self.wl.wavelet[t] / self.dh2
-
         _forward_kernel(
-          self.upas, self.upre, self.ufut, self.laplacian,
-          self.damp_x, self.damp_z, self.inv_dh2,
-          self.mdl.nzz, self.mdl.nxx, self.wl.wavelet,
-          self.ix, self.iz, self.dh2, self.arg, t
+          self.u.past, self.u.present, self.u.future, self.laplacian,
+          self.damp_x, self.damp_z, self.kernel_arg.inv_dh2,
+          self.m.nzz, self.m.nxx, self.w.wavelet,
+          self.ix, self.iz, self.kernel_arg.dh2, 
+          self.kernel_arg.velocity_term, t
         )
 
-        self.__get_seismogram(self.seis.seismogram, self.upre, t)
+        self.__get_seismogram(self.s.seismogram, self.u.present, t)
 
         self.get_snapshots(t, isSnap)
 
-      self.upas.fill(0.0)
-      self.upre.fill(0.0)
-      self.ufut.fill(0.0)
+      self.u.past.fill(0.0)
+      self.u.present.fill(0.0)
+      self.u.future.fill(0.0)
 
   def get_snapshots(self, t: int, isSnap: bool):
     if isSnap and not t % self.snap_ratio:
-      self.snapshots[self.snap_id_src] = self.upre.copy()
+      self.snapshots[self.snap_id_src] = self.u.present.copy()
       self.snap_id_src += 1   
 
   def remove_direct_wave_offset(self, ix: int, iz: int) -> None:
@@ -99,15 +88,16 @@ class Modeling:
       for t in range(1, self.c.nt - 1):
 
         _forward_kernel(
-          self.upas, self.upre, self.ufut, self.laplacian,
-          self.damp_x, self.damp_z, self.inv_dh2,
-          self.mdl.nzz, self.mdl.nxx, self.wl.wavelet,
-          self.ix, self.iz, self.dh2, self.arg, t
+          self.u.past, self.u.present, self.u.future, self.laplacian,
+          self.damp_x, self.damp_z, self.kernel_arg.inv_dh2,
+          self.m.nzz, self.m.nxx, self.w.wavelet,
+          self.ix, self.iz, self.kernel_arg.dh2, 
+          self.kernel_arg.velocity_term, t
         )
 
-        self.__get_seismogram(self.seis.seismogram, self.upre, t)
+        self.__get_seismogram(self.s.seismogram, self.u.present, t)
 
-      self.seis.remove_direct_wave(self.ix, self.iz)
+      self.s.remove_direct_wave(self.ix, self.iz)
 
   def remove_direct_wave_model(self, ix: int, iz: int) -> None:
       self.ix, self.iz = ix, iz
@@ -117,44 +107,46 @@ class Modeling:
       for t in range(1, self.c.nt - 1):
 
         _forward_kernel(
-          self.upas, self.upre, self.ufut, self.laplacian,
-          self.damp_x, self.damp_z, self.inv_dh2,
-          self.mdl.nzz, self.mdl.nxx, self.wl.wavelet,
-          self.ix, self.iz, self.dh2, self.arg, t
+          self.u.past, self.u.present, self.u.future, self.laplacian,
+          self.damp_x, self.damp_z, self.kernel_arg.inv_dh2,
+          self.m.nzz, self.m.nxx, self.w.wavelet,
+          self.ix, self.iz, self.kernel_arg.dh2, 
+          self.kernel_arg.velocity_term, t
         )
 
-        self.__get_seismogram(self.seis.seismogram, self.upre, t)
+        self.__get_seismogram(self.s.seismogram, self.u.present, t)
 
         _forward_kernel(
-          self.upas_homo, self.upre_homo, self.ufut_homo, 
+          self.u_homo.past, self.u_homo.present, self.u_homo.future, 
           self.laplacian_homo, self.damp_x, self.damp_z, 
-          self.inv_dh2, self.mdl.nzz, self.mdl.nxx, 
-          self.wl.wavelet, self.ix, self.iz, self.dh2, self.arg2, t
+          self.kernel_arg_homo.inv_dh2, self.m.nzz, self.m.nxx, 
+          self.w.wavelet, self.ix, self.iz, self.kernel_arg_homo.dh2, 
+          self.kernel_arg_homo.velocity_term, t
         )
 
-        self.__get_seismogram(self.seis.seismogram_homo, self.upre_homo, t)
+        self.__get_seismogram(self.s.seismogram_homo, self.u_homo.present, t)
 
-      self.seis.seismogram -= self.seis.seismogram_homo
+      self.s.seismogram -= self.s.seismogram_homo
 
   def zero_out_matrices(self):
-    self.seis.seismogram.fill(0.0)
-    self.seis.seismogram_homo.fill(0.0)
+    self.s.seismogram.fill(0.0)
+    self.s.seismogram_homo.fill(0.0)
 
-    self.upas.fill(0.0)
-    self.upre.fill(0.0)
-    self.ufut.fill(0.0)
-    self.upas_homo.fill(0.0)
-    self.upre_homo.fill(0.0)
-    self.ufut_homo.fill(0.0)
+    self.u.past.fill(0.0)
+    self.u.present.fill(0.0)
+    self.u.future.fill(0.0)
+    self.u_homo.past.fill(0.0)
+    self.u_homo.present.fill(0.0)
+    self.u_homo.future.fill(0.0)
 
   def __get_seismogram(self, seismogram: np.ndarray, upre: np.ndarray, t: int) -> None:
-    for irec in range(len(self.geom.recx)):
-      rx = int(self.geom.recx[irec]) + self.c.nb
-      rz = int(self.geom.recz[irec]) + self.c.nb
+    for irec in range(len(self.g.recx)):
+      rx = int(self.g.recx[irec]) + self.c.nb
+      rz = int(self.g.recz[irec]) + self.c.nb
       seismogram[t, irec] = upre[rz, rx]
 
   def get_damp(self):
-    for i in range(self.mdl.nzz):
+    for i in range(self.m.nzz):
 
       if self.c.nb <= i < self.c.nb + self.c.nz:
           self.damp_z[i] = 1.0
@@ -167,7 +159,7 @@ class Modeling:
           d = i - (self.c.nb + self.c.nz - 1)
           self.damp_z[i] = np.exp(-(self.c.factor * d) * (self.c.factor * d))
 
-    for j in range(self.mdl.nxx):
+    for j in range(self.m.nxx):
 
       if self.c.nb <= j < self.c.nb + self.c.nx:
           self.damp_x[j] = 1.0
@@ -182,7 +174,7 @@ class Modeling:
 
   def show_modeling_status(self):
     system("clear")
-    progress = self.current/len(self.geom.srcxId)
+    progress = self.current/len(self.g.srcxId)
     bar = 10 * "██"
     print(f"\n Shots: {100 * progress}% | {bar[:int((10.0 * progress))]} |")
     self.current += 1
@@ -213,8 +205,8 @@ class Modeling:
         vmin=-scale, vmax=scale, alpha=0.7
       )
 
-      ax.plot(self.geom.recx, self.geom.recz, 'bv')
-      ax.plot(self.geom.srcxId, self.geom.srczId, 'r*')
+      ax.plot(self.g.recx, self.g.recz, 'bv')
+      ax.plot(self.g.srcxId, self.g.srczId, 'r*')
 
       ims.append([model_frame, snap_frame])
 
@@ -233,6 +225,34 @@ class Modeling:
 
     plt.show()
     return ani
+
+@dataclass(slots=True)
+class Wavefield:
+  shape: Tuple[int, int]
+  past: np.ndarray = field(init=False)
+  present: np.ndarray = field(init=False)
+  future: np.ndarray = field(init=False)
+
+  def __post_init__(self):
+    self.past = np.zeros(self.shape, dtype=np.float32)
+    self.present = np.zeros(self.shape, dtype=np.float32)
+    self.future = np.zeros(self.shape, dtype=np.float32)
+
+
+@dataclass(slots=True)
+class KernelArguments:
+  dh2: float
+  inv_dh2: float
+  velocity_term: np.ndarray
+
+  @classmethod
+  def make(cls, dh, dt, model):
+    dh2 = dh ** 2
+    return cls(
+      dh2=dh2,
+      inv_dh2=1.0 / (5040.0 * dh2),
+      velocity_term=dt**2 * model**2,
+    )
 
 @njit(parallel=True, fastmath=True)
 def _forward_kernel(

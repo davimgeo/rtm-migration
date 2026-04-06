@@ -13,7 +13,7 @@ class Geometry:
     self.recx, self.recz     = np.array([]), np.array([])
     self.srcxId, self.srczId = np.array([]), np.array([])
 
-    self.nrec = 0
+    self.nrec, self.nsrc = 0, 0
 
   def get(self):
     mode = self.c.geometry_mode.upper()
@@ -21,7 +21,6 @@ class Geometry:
       self.load()
     elif mode == "CREATE":
       self.create()
-      self.load()
     else:
       raise KeyError("Choose a valid mode. (create, load)")
 
@@ -47,18 +46,42 @@ class Geometry:
     self.nrec = len(self.recx)
 
   def create(self) -> None:
-      self.nrec = int(self.c.nx / self.c.offset)
+    self.createReceivers()
+    self.createSources()
+     
+    self.save() 
+
+  def createReceivers(self):
+    self.nrec = int(self.c.nx / self.c.offset)
+
+    self.recx = np.arange(0, self.nrec) * self.c.offset
+    self.recz = np.full(self.nrec, self.c.rec_depth)
+
+  def createSources(self):
+    self.nsrc = len(self.c.sources_create) 
+
+    self.srcxId = [src / self.c.dh for src in self.c.sources_create]
+    self.srczId = np.full(self.nsrc, self.c.src_depth / self.c.dh)
+
+  def save(self):
+    if self.c.save_create:
 
       recId = np.arange(1, self.nrec + 1)
-      self.recx = np.arange(0, self.nrec) * self.c.offset
-      self.recz = np.full(self.nrec, self.c.rec_depth)
+      srcId = np.arange(1, self.nsrc + 1)
 
-      data = np.column_stack((recId, self.recx * self.c.dh, self.recz))
+      receivers = np.column_stack((recId, self.recx * self.c.dh, self.recz))
+      sources = np.column_stack((srcId, self.recx * self.c.dh, self.recz))
 
-      np.savetxt(
-          "data/input/geometry/receivers.txt",
+      files = [
+        ("data/input/geometry/receivers_new.txt", receivers, "recId, recx, recz"),
+        ("data/input/geometry/sources_new.txt",  sources,   "srcId, srcxId, srczId"),
+      ]
+
+      for path, data, header in files:
+        np.savetxt(
+          path,
           data,
           fmt="%.0f",
           delimiter=",",
-          header="recId, recx, recz",
-      )
+          header=header,
+        )

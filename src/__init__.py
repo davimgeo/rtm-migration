@@ -1,33 +1,31 @@
 from .cfg import Config
 
-from .migration import Migration
+_engine = Config().load().engine
 
-from .modeling import Modeling
+if _engine == "GPU":
+  from . import GPU as _backend
+elif _engine == "CPU":
+  from . import CPU as _backend
+else:
+  raise ValueError(f"Unknown engine: {_engine}")
 
-from .model import Model
+Config = Config
+Migration = _backend.Migration 
+Model = _backend.Model
+Geometry = _backend.Geometry
+Seismogram = _backend.Seismogram
+Propagation = _backend.Propagation 
+Wavelet = _backend.Wavelet 
 
-from .wavelet import Wavelet
-
-from .seismogram import Seismogram
-
-from .geometry import Geometry
-
-from .plots import Plotting
-
-def measure_runtime(func):
-  import time
-  def wrapper(*args, **kwargs):
-    start = time.time()
-    result = func(*args, **kwargs)
-    end = time.time()
-    print(f"Function {func.__name__} took: {round(end - start, 4)} seconds")
-    return result
-
-  return wrapper
+from .utils import measure_runtime
 
 __all__ = [
-    "Config", "Migration",
-    "Model", "Geometry",
-    "Seismogram", "measure_runtime",
-    "Modeling", "Wavelet", "Plotting"
+  "Config",
+  "Migration",
+  "Model",
+  "Geometry",
+  "Seismogram",
+  "Propagation",
+  "Wavelet",
+  "measure_runtime",
 ]

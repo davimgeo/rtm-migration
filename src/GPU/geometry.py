@@ -1,0 +1,89 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+  from . import Config
+
+import cupy as cp
+
+class Geometry:
+  def __init__(self, c: Config) -> None:
+    self.c = c
+
+    self.recx, self.recz     = cp.array([]), cp.array([])
+    self.srcxId, self.srczId = cp.array([]), cp.array([])
+
+    self.nrec, self.nsrc = 0, 0
+
+  def get(self):
+    mode = self.c.geometry_mode.upper()
+    if mode == "LOAD":
+      self.load()
+    elif mode == "CREATE":
+      self.create()
+    else:
+      raise KeyError("Choose a valid mode. (create, load)")
+
+  def load(self) -> None:
+    receivers = cp.loadtxt(self.c.receivers, delimiter=',', skiprows=1)
+
+    if receivers.ndim == 1:
+      self.recx = cp.array([receivers[1]]) / self.c.dh
+      self.recz = cp.array([receivers[2]]) / self.c.dh
+    else:
+      self.recx = receivers[:, 1] / self.c.dh
+      self.recz = receivers[:, 2] / self.c.dh
+
+    sources = cp.loadtxt(self.c.sources, delimiter=',', skiprows=1)
+
+    if sources.ndim == 1:
+      self.srcxId = cp.array([sources[1]]) / self.c.dh
+      self.srczId = cp.array([sources[2]]) / self.c.dh
+    else:
+      self.srcxId = sources[:, 1] / self.c.dh
+      self.srczId = sources[:, 2] / self.c.dh
+ 
+    self.nrec = len(self.recx)
+
+  def create(self) -> None:
+    self.createReceivers()
+    self.createSources()
+     
+    self.save() 
+
+  def createReceivers(self):
+    self.nrec = int(self.c.nx / self.c.offset)
+
+    self.recx = cp.arange(0, self.nrec) * self.c.offset
+    self.recz = cp.full(self.nrec, self.c.rec_depth)
+
+  def createSources(self):
+    self.nsrc = len(self.c.sources_create) 
+
+    self.srcxId = cp.asarray([src / self.c.dh for src in self.c.sources_create])
+    self.srczId = cp.full(self.nsrc, self.c.src_depth / self.c.dh)
+
+
+  def save(self):
+    if self.c.save_create:
+
+      recId = cp.arange(1, self.nrec + 1)
+      srcId = cp.arange(1, self.nsrc + 1)
+
+      receivers = cp.column_stack((recId, self.recx * self.c.dh, self.recz))
+      sources = cp.column_stack((srcId, self.recx * self.c.dh, self.recz))
+
+      files = [
+        ("data/icput/geometry/receivers_new.txt", receivers, "recId, recx, recz"),
+        ("data/icput/geometry/sources_new.txt",  sources,   "srcId, srcxId, srczId"),
+      ]
+
+      for path, data, header in files:
+        cp.savetxt(
+          path,
+          data,
+          fmt="%.0f",
+          delimiter=",",
+          header=header,
+        )
+

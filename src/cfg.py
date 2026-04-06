@@ -3,11 +3,14 @@ import tomllib
 from dataclasses import dataclass, field, fields
 from typing import List
 
+DEFAULT_PATH = "config/parameters.toml"
+
 @dataclass
 class Parameters:
 
   # General 
   debug: bool = field(default=False, metadata={"toml": "General.debug"})
+  engine: str = field(default="", metadata={"toml": "General.engine"})
 
   # RTM 
   save_image: bool = field(default=False, metadata={"toml": "RTM.save"})
@@ -40,7 +43,10 @@ class Parameters:
   receivers: str = field(default="", metadata={"toml": "Geometry.load.receivers"})
   sources: str = field(default="", metadata={"toml": "Geometry.load.sources"})
   offset: float = field(default=0.0, metadata={"toml": "Geometry.create.offset"})
+  save_create: bool = field(default=False, metadata={"toml": "Geometry.create.save"})
   rec_depth: float = field(default=0.0, metadata={"toml": "Geometry.create.receiversDepth"})
+  src_depth: float = field(default=0.0, metadata={"toml": "Geometry.create.sourcesDepth"})
+  sources_create: List[int] = field(default_factory=list, metadata={"toml": "Geometry.create.sources"})
 
   # Wavelet
   fmax: float = field(default=0.0, metadata={"toml": "Wavelet.fmax"})
@@ -51,10 +57,10 @@ class Parameters:
   snap_num: int = field(default=0, metadata={"toml": "Snapshots.number"})
 
 class Config(Parameters):
-  def __init__(self, toml_path: str):
+  def __init__(self, toml_path: str | None = None):
     super().__init__()
 
-    self.toml_path = toml_path 
+    self.toml_path = toml_path or DEFAULT_PATH
 
   def load(self):
     with open(self.toml_path, "rb") as f:
