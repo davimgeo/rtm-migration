@@ -10,7 +10,7 @@ import numpy as np
 from numba import njit, prange
 
 if TYPE_CHECKING:
-  from src import (
+  from . import (
     Config,
     Geometry,
     Propagation,
@@ -152,12 +152,7 @@ class Migration:
 
   def __image_condition(self):
     self.image += self.snaps.dt * self.num
-    #self.image += self.dt_snaps * (self.num / (self.den + 1e-9))
-
-  def __get_rc_snaps(self, t: int):
-    if not t % self.snaps.ratio:
-      self.snaps.rec[self.snaps.current_rec_id] = self.d.present.copy()
-      self.snaps.current_rec_id -= 1
+    #self.image += self.snaps.dt * (self.num / (self.den))
 
   def __laplacian_filter(self):
     inv_dh = 1.0 / (12.0 * self.c.dh * self.c.dh)

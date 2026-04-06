@@ -5,6 +5,7 @@ if TYPE_CHECKING:
   from . import Config
 
 import cupy as cp
+import numpy as np
 
 class Geometry:
   def __init__(self, c: Config) -> None:
@@ -54,32 +55,39 @@ class Geometry:
   def createReceivers(self):
     self.nrec = int(self.c.nx / self.c.offset)
 
-    self.recx = cp.arange(0, self.nrec) * self.c.offset
+    self.recx = np.arange(0, self.nrec) * self.c.offset
     self.recz = cp.full(self.nrec, self.c.rec_depth)
 
   def createSources(self):
     self.nsrc = len(self.c.sources_create) 
 
-    self.srcxId = cp.asarray([src / self.c.dh for src in self.c.sources_create])
-    self.srczId = cp.full(self.nsrc, self.c.src_depth / self.c.dh)
-
+    self.srcxId = [src / self.c.dh for src in self.c.sources_create]
+    self.srczId = cp.full(self.nsrc, self.c.src_depth)
 
   def save(self):
     if self.c.save_create:
+      recId = np.arange(1, self.nrec + 1)
+      srcId = np.arange(1, self.nsrc + 1)
 
-      recId = cp.arange(1, self.nrec + 1)
-      srcId = cp.arange(1, self.nsrc + 1)
+      recx = cp.asnumpy(self.recx)
+      srcx = cp.asnumpy(self.srcxId)
 
-      receivers = cp.column_stack((recId, self.recx * self.c.dh, self.recz))
-      sources = cp.column_stack((srcId, self.recx * self.c.dh, self.recz))
+      recz = cp.asnumpy(self.recz)
+      srcz = cp.asnumpy(self.srczId)
+
+      recCompensatedbyGrid = [rec * self.c.dh for rec in recx]
+      srcCompensatedbyGrid = [src * self.c.dh for src in srcx]
+
+      receivers = np.column_stack((recId, recCompensatedbyGrid, recz))
+      sources = np.column_stack((srcId, srcCompensatedbyGrid, srcz))
 
       files = [
-        ("data/icput/geometry/receivers_new.txt", receivers, "recId, recx, recz"),
-        ("data/icput/geometry/sources_new.txt",  sources,   "srcId, srcxId, srczId"),
+        ("data/input/geometry/receivers_new.txt", receivers, "recId, recx, recz"),
+        ("data/input/geometry/sources_new.txt",  sources,   "srcId, srcxId, srczId"),
       ]
 
       for path, data, header in files:
-        cp.savetxt(
+        np.savetxt(
           path,
           data,
           fmt="%.0f",

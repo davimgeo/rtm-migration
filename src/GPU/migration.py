@@ -145,9 +145,9 @@ class Migration:
         self.grid,
         self.block,
         (
-            self.image,
-            self.num,
-            self.snaps.dt
+          self.image,
+          self.num,
+          self.snaps.dt
         )
     )
 

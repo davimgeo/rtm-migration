@@ -43,7 +43,7 @@ class Parameters:
   receivers: str = field(default="", metadata={"toml": "Geometry.load.receivers"})
   sources: str = field(default="", metadata={"toml": "Geometry.load.sources"})
   offset: float = field(default=0.0, metadata={"toml": "Geometry.create.offset"})
-  save_create: bool = field(default=False, metadata={"toml": "Geometry.create.save"})
+  save_create: bool = field(default=False, metadata={"toml": "Geometry.load.save"})
   rec_depth: float = field(default=0.0, metadata={"toml": "Geometry.create.receiversDepth"})
   src_depth: float = field(default=0.0, metadata={"toml": "Geometry.create.sourcesDepth"})
   sources_create: List[int] = field(default_factory=list, metadata={"toml": "Geometry.create.sources"})

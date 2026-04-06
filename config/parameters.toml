@@ -1,11 +1,11 @@
 # ------------------------- General -------------------------
 [General]
 debug = false
-engine = "CPU" # Keys: GPU/CPU
+engine = "GPU" # Keys: GPU/CPU
 
 # --------------------------- RTM ---------------------------
 [RTM]
-save = false
+save = true
 
 laplacian = true
 
@@ -54,10 +54,10 @@ mode = "load" # Keys: create/load
 save = false
 
 receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources7.txt"
+sources = "data/input/geometry/sources22.txt"
 
 [Geometry.create]
-offset = 15
+offset = 5
 receiversDepth = 0
 
 sources = [1700]

@@ -62,47 +62,35 @@ class Propagation:
 
       self.zero_out_matrices()
 
-      _forward_kernel(
-        self.grid, self.block, (
-          self.u.past, self.u.present, 
-          self.u.future,
-          self.laplacian,
-          self.damp_x, self.damp_z,
-          self.kernel_arg.inv_dh2,
-          self.m.nzz, self.m.nxx,
-          self.w.wavelet,
-          self.ix, self.iz,
-          self.kernel_arg.dh2,
-          self.kernel_arg.velocity_term,
-          self.c.nt,
-          self.s.seismogram,
-          self.g.recx, self.g.recz,
-          self.g.nrec, t
-        )
+      self.forward_propagation(
+         self.u,
+         self.laplacian,
+         self.kernel_arg,
+         t
+      ) 
+
+      _get_seismogram(
+        self.s.seismogram,
+        self.u.present,
+        self.g.nrec
       )
 
-      #if t % 400:
-      #  import matplotlib.pyplot as plt
-      #  plt.imshow(cp.asnumpy(self.u.present))
-      #  plt.show()
+      if not t % 400:
+        import matplotlib.pyplot as plt
+        plt.imshow(cp.asnumpy(self.u.present))
+        plt.show()
 
-      _forward_kernel(
-        self.grid, self.block, (
-          self.u_homo.past, self.u_homo.present, 
-          self.u_homo.future,
-          self.laplacian_homo,
-          self.damp_x, self.damp_z,
-          self.kernel_arg_homo.inv_dh2,
-          self.m.nzz, self.m.nxx,
-          self.w.wavelet,
-          self.ix, self.iz,
-          self.kernel_arg_homo.dh2,
-          self.kernel_arg_homo.velocity_term,
-          self.c.nt,
-          self.s.seismogram_homo,
-          self.g.recx, self.g.recz,
-          self.g.nrec, t
-        )
+      self.forward_propagation(
+         self.u_homo,
+         self.laplacian_homo,
+         self.kernel_arg_homo,
+         t
+      ) 
+
+      _get_seismogram(
+        self.s.seismogram_homo,
+        self.u_homo.present,
+        self.g.nrec
       )
 
     self.s.seismogram -= self.s.seismogram_homo
@@ -118,6 +106,38 @@ class Propagation:
     self.u_homo.past.fill(0.0)
     self.u_homo.present.fill(0.0)
     self.u_homo.future.fill(0.0)
+
+  def forward_propagation(
+    self,
+    u_field,
+    laplacian_field,
+    kernel_arg,
+    t
+  ):
+
+    _forward_kernel(
+        self.grid, self.block, (
+        u_field.past,
+        u_field.present,
+        u_field.future,
+        laplacian_field,
+        self.damp_x,
+        self.damp_z,
+        kernel_arg.inv_dh2,
+        self.m.nzz,
+        self.m.nxx,
+        self.w.wavelet,
+        self.ix,
+        self.iz,
+        kernel_arg.dh2,
+        kernel_arg.velocity_term,
+        self.c.nt,
+        t
+      )
+    )
+    
+    u_field.future = u_field.present
+    u_field.present = u_field.past
 
   def get_damp(self):
     for i in range(self.m.nzz):
@@ -182,15 +202,11 @@ void forward_kernel(
     float* laplacian, float* damp_x, float* damp_z,
     float inv_dh2, int nzz, int nxx, float* ricker,
     int ix, int iz, float dh2, float* arg,
-    int nt, float* seismogram, float* recx, float* recz,
-    int nrec, int t
+    int nt, int t
 )
 {
     int i = blockIdx.y * blockDim.y + threadIdx.y; 
     int j = blockIdx.x * blockDim.x + threadIdx.x;
-
-    int k = blockIdx.y * blockDim.y + threadIdx.y;
-    int l = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (i == iz && j == ix) {
       upre[iz * nxx + ix] += ricker[t] / dh2;
@@ -220,35 +236,30 @@ void forward_kernel(
             128.0  * upre[i * nxx + (j+3)] -
             9.0    * upre[i * nxx + (j+4)];
 
-        laplacian[i * nxx + j] = (d2u_dx2 + d2u_dz2) * inv_dh2;
-      }
-
-    int k = blockIdx.y * blockDim.y + threadIdx.y;
-    int l = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if ((k > 3 && k < nzz - 4) && (l > 3 && l < nxx - 4))
-    {
-        int idx = k * nxx + l;
-
-        depas[idx] = arg[idx] * laplacian[idx] + 2.0 * depre[idx] - defut[idx];
+        laplacian = (d2u_dx2 + d2u_dz2) * inv_dh2;
 
         float damp = damp_x[l] * damp_z[k];
 
-        defut[idx] = depre[idx] * damp;
-        depre[idx] = depas[idx] * damp;
-    }
+        upas[i * nxx + j] = (
+          arg[i * nxx + j] * laplacian 
+          + 2.0  * upre[i * nxx + j] 
+          - ufut[i * nxx + j]
+        ) * damp;
 
-    if (i == 0 && j == 0)
-    {
-      for (int irec = 0; irec < nrec; irec++)
-      {
-        int rx = (int)recx[irec];
-        int rz = (int)recz[irec];
-
-        seismogram[t * nrec + irec] = upre[rz * nxx + rx];
       }
-    }
-
 }
 ''', 'forward_kernel')
 
+_get_seismogram = cp.RawKernel(r'''
+extern "C" __global__
+void get_seismogram(float* seismogram, float* upre, int nrec)
+{
+  int irec = blockIdx.x * blockDim.x + threadIdx.x;
+
+  int rx = (int)recx[irec];
+  int rz = (int)recz[irec];
+
+  seismogram[t * nrec + irec] = upre[rz * nxx + rx];
+}
+
+''', 'get_seismogram')

@@ -17,6 +17,7 @@ Seismogram = _backend.Seismogram
 Propagation = _backend.Propagation 
 Wavelet = _backend.Wavelet 
 
+from .plots import Plotting
 from .utils import measure_runtime
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
   "Seismogram",
   "Propagation",
   "Wavelet",
+  "Plotting",
   "measure_runtime",
 ]

@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-  from src import Config
+  from . import Config
 
 import numpy as np
 
@@ -61,7 +61,7 @@ class Geometry:
     self.nsrc = len(self.c.sources_create) 
 
     self.srcxId = [src / self.c.dh for src in self.c.sources_create]
-    self.srczId = np.full(self.nsrc, self.c.src_depth / self.c.dh)
+    self.srczId = np.full(self.nsrc, self.c.src_depth)
 
   def save(self):
     if self.c.save_create:
@@ -69,8 +69,11 @@ class Geometry:
       recId = np.arange(1, self.nrec + 1)
       srcId = np.arange(1, self.nsrc + 1)
 
-      receivers = np.column_stack((recId, self.recx * self.c.dh, self.recz))
-      sources = np.column_stack((srcId, self.recx * self.c.dh, self.recz))
+      recCompensatedbyGrid = [rec * self.c.dh for rec in self.recx]
+      srcCompensatedbyGrid = [src * self.c.dh for src in self.srcxId]
+
+      receivers = np.column_stack((recId, recCompensatedbyGrid, self.recz))
+      sources = np.column_stack((srcId, srcCompensatedbyGrid, self.srczId))
 
       files = [
         ("data/input/geometry/receivers_new.txt", receivers, "recId, recx, recz"),
