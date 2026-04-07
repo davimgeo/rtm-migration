@@ -4,6 +4,8 @@ from os import system
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Tuple
 
+from src.utils import measure_runtime
+
 if TYPE_CHECKING:
   from . import (
     Config, Model, Seismogram, 
@@ -106,22 +108,18 @@ class Propagation:
 
       for t in range(1, self.c.nt - 1):
 
-        _forward_kernel(
-          self.u.past, self.u.present, self.u.future, self.laplacian,
-          self.damp_x, self.damp_z, self.kernel_arg.inv_dh2,
-          self.m.nzz, self.m.nxx, self.w.wavelet,
-          self.ix, self.iz, self.kernel_arg.dh2, 
-          self.kernel_arg.velocity_term, t
+        self.forward_propagation(
+          self.u,
+          self.kernel_arg,
+          t
         )
 
         self.__get_seismogram(self.s.seismogram, self.u.present, t)
 
-        _forward_kernel(
-          self.u_homo.past, self.u_homo.present, self.u_homo.future, 
-          self.laplacian_homo, self.damp_x, self.damp_z, 
-          self.kernel_arg_homo.inv_dh2, self.m.nzz, self.m.nxx, 
-          self.w.wavelet, self.ix, self.iz, self.kernel_arg_homo.dh2, 
-          self.kernel_arg_homo.velocity_term, t
+        self.forward_propagation(
+          self.u_homo,
+          self.kernel_arg_homo,
+          t
         )
 
         self.__get_seismogram(self.s.seismogram_homo, self.u_homo.present, t)
@@ -138,6 +136,22 @@ class Propagation:
     self.u_homo.past.fill(0.0)
     self.u_homo.present.fill(0.0)
     self.u_homo.future.fill(0.0)
+
+  def forward_propagation(
+      self,
+      u_field: Wavefield,
+      kernel_arg: KernelArguments,
+      t: int
+  ) -> None:
+
+    _forward_kernel(
+      u_field.past, u_field.present,
+      u_field.future, self.damp_x, self.damp_z, 
+      kernel_arg.inv_dh2, self.m.nzz, 
+      self.m.nxx, self.w.wavelet,
+      self.ix, self.iz, kernel_arg.dh2,
+      kernel_arg.velocity_term, t
+    )
 
   def __get_seismogram(self, seismogram: np.ndarray, upre: np.ndarray, t: int) -> None:
     for irec in range(len(self.g.recx)):
@@ -259,7 +273,6 @@ def _forward_kernel(
   upas: np.ndarray,
   upre: np.ndarray,
   ufut: np.ndarray,
-  laplacian: np.ndarray,
   damp_x: np.ndarray,
   damp_z: np.ndarray,
   inv_dh2: float,
@@ -272,7 +285,6 @@ def _forward_kernel(
   arg: np.ndarray,
   t: int,
 ) -> None:
-
   
   upre[iz, ix] += ricker[t] / dh2
 
@@ -290,14 +302,13 @@ def _forward_kernel(
         1008.0 * upre[i, j+2] + 128.0   * upre[i, j+3] - 9.0    * upre[i, j+4]
       )
 
-      laplacian[i, j] = (d2u_dx2 + d2u_dz2) * inv_dh2
+      laplacian = (d2u_dx2 + d2u_dz2) * inv_dh2
 
+      upas[i, j] = arg[i, j] * laplacian + 2.0 * upre[i, j] - ufut[i, j]
+    
   for i in prange(4, nzz - 4):
     for j in range(4, nxx - 4):
-
-      upas[i, j] = arg[i, j] * laplacian[i, j] + 2.0 * upre[i, j] - ufut[i, j]
-      
       damp = damp_x[j] * damp_z[i]
-
+  
       ufut[i, j] = upre[i, j] * damp
       upre[i, j] = upas[i, j] * damp

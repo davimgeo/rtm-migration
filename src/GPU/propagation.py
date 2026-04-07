@@ -58,39 +58,55 @@ class Propagation:
   def remove_direct_wave_model(self, ix: int, iz: int) -> None:
     self.ix, self.iz = ix, iz
 
-    for t in range(1, self.c.nt - 1):
+    self.zero_out_matrices()
 
-      self.zero_out_matrices()
+    for t in range(1, self.c.nt - 1):
 
       self.forward_propagation(
          self.u,
          self.laplacian,
          self.kernel_arg,
+         self.m.model,
          t
       ) 
-
-      _get_seismogram(
-        self.s.seismogram,
-        self.u.present,
-        self.g.nrec
-      )
 
       if not t % 400:
         import matplotlib.pyplot as plt
         plt.imshow(cp.asnumpy(self.u.present))
         plt.show()
 
+      _get_seismogram(
+        self.grid, self.block, (
+        self.s.seismogram,
+        self.u.present,
+        self.g.nrec,
+        self.g.recx,
+        self.g.recz,
+        self.m.nxx,
+        self.m.nzz,
+        t
+        )
+      )
+
       self.forward_propagation(
          self.u_homo,
          self.laplacian_homo,
          self.kernel_arg_homo,
+         self.m.model_smooth,
          t
       ) 
 
       _get_seismogram(
+        self.grid, self.block, (
         self.s.seismogram_homo,
         self.u_homo.present,
-        self.g.nrec
+        self.g.nrec,
+        self.g.recx,
+        self.g.recz,
+        self.m.nxx,
+        self.m.nzz,
+        t
+        )
       )
 
     self.s.seismogram -= self.s.seismogram_homo
@@ -109,11 +125,12 @@ class Propagation:
 
   def forward_propagation(
     self,
-    u_field,
-    laplacian_field,
-    kernel_arg,
-    t
-  ):
+    u_field: Wavefield,
+    laplacian_field: cp.ndarray,
+    kernel_arg: KernelArguments,
+    model: cp.ndarray,
+    t: int
+  ) -> None:
 
     _forward_kernel(
         self.grid, self.block, (
@@ -130,14 +147,12 @@ class Propagation:
         self.ix,
         self.iz,
         kernel_arg.dh2,
-        kernel_arg.velocity_term,
+        model,
         self.c.nt,
+        self.c.dt,
         t
       )
     )
-    
-    u_field.future = u_field.present
-    u_field.present = u_field.past
 
   def get_damp(self):
     for i in range(self.m.nzz):
@@ -201,14 +216,15 @@ void forward_kernel(
     float* upas, float* upre, float* ufut,
     float* laplacian, float* damp_x, float* damp_z,
     float inv_dh2, int nzz, int nxx, float* ricker,
-    int ix, int iz, float dh2, float* arg,
-    int nt, int t
+    int ix, int iz, float dh2, float* vp,
+    int nt, float dt, int t
 )
 {
     int i = blockIdx.y * blockDim.y + threadIdx.y; 
     int j = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (i == iz && j == ix) {
+    if (i == iz && j == ix)
+    {
       upre[iz * nxx + ix] += ricker[t] / dh2;
     }
 
@@ -236,30 +252,48 @@ void forward_kernel(
             128.0  * upre[i * nxx + (j+3)] -
             9.0    * upre[i * nxx + (j+4)];
 
-        laplacian = (d2u_dx2 + d2u_dz2) * inv_dh2;
+        float laplacian = (d2u_dx2 + d2u_dz2) * inv_dh2;
 
-        float damp = damp_x[l] * damp_z[k];
+        const float vp2 = vp[i * nxx + j] * vp[i * nxx + j];
 
         upas[i * nxx + j] = (
-          arg[i * nxx + j] * laplacian 
+          dt*dt*vp2 * laplacian 
           + 2.0  * upre[i * nxx + j] 
           - ufut[i * nxx + j]
-        ) * damp;
-
+        );
       }
+
+    if (i >= 4 && i < nzz - 4 && j >= 4 && j < nxx - 4) 
+    {
+      float damp = damp_x[j] * damp_z[i];
+
+      ufut[i * nxx + j] = upre[i * nxx + j] * damp;
+      upre[i * nxx + j] = upas[i * nxx + j] * damp;
+    }
 }
 ''', 'forward_kernel')
 
 _get_seismogram = cp.RawKernel(r'''
 extern "C" __global__
-void get_seismogram(float* seismogram, float* upre, int nrec)
+void get_seismogram(
+  float* seismogram,
+  float* upre,
+  int nrec,
+  float* recx,
+  float* recz,
+  int nxx,
+  int nzz,
+  int t
+)
 {
   int irec = blockIdx.x * blockDim.x + threadIdx.x;
 
-  int rx = (int)recx[irec];
-  int rz = (int)recz[irec];
-
-  seismogram[t * nrec + irec] = upre[rz * nxx + rx];
+  if (irec < nrec)
+  {
+    int rx = (int)recx[irec];
+    int rz = (int)recz[irec];
+    seismogram[t * nrec + irec] = upre[rz * nxx + rx];
+  }
 }
 
 ''', 'get_seismogram')

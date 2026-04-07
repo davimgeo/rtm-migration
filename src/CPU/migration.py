@@ -117,8 +117,7 @@ class Migration:
 
   def __forward_propagation(self, t: int):
     _forward_kernel(
-      self.u.past, self.u.present, self.u.future,
-      self.laplacian, self.md.damp_x,
+      self.u.past, self.u.present, self.u.future, self.md.damp_x,
       self.md.damp_z, self.kernel_args.inv_dh2,
       self.m.nzz, self.m.nxx, 
       self.w.wavelet, self.ix,
@@ -134,9 +133,11 @@ class Migration:
   def __backward_propagation(self, t: int):
     _backward_kernel(
       self.d.past, self.d.present, self.d.future,
-      self.laplacian, self.md.damp_x, self.md.damp_z,
-      self.kernel_args.inv_dh2, self.m.nzz, self.m.nxx, self.kernel_args.dh2,
-      self.kernel_args.velocity_term, self.g.recx, self.g.recz, self.c.nb,
+      self.md.damp_x, self.md.damp_z,
+      self.kernel_args.inv_dh2, self.m.nzz, 
+      self.m.nxx, self.kernel_args.dh2,
+      self.kernel_args.velocity_term, self.g.recx, 
+      self.g.recz, self.c.nb,
       self.s.seismogram, t
     )
 
@@ -355,7 +356,6 @@ def _forward_kernel(
   upas: np.ndarray,
   upre: np.ndarray,
   ufut: np.ndarray,
-  laplacian: np.ndarray,
   damp_x: np.ndarray,
   damp_z: np.ndarray,
   inv_dh2: float,
@@ -368,7 +368,7 @@ def _forward_kernel(
   arg: np.ndarray,
   t: int,
 ) -> None:
-
+  
   upre[iz, ix] += ricker[t] / dh2
 
   for i in prange(4, nzz - 4):
@@ -385,13 +385,12 @@ def _forward_kernel(
         1008.0 * upre[i, j+2] + 128.0   * upre[i, j+3] - 9.0    * upre[i, j+4]
       )
 
-      laplacian[i, j] = (d2u_dx2 + d2u_dz2) * inv_dh2
+      laplacian = (d2u_dx2 + d2u_dz2) * inv_dh2
 
+      upas[i, j] = arg[i, j] * laplacian + 2.0 * upre[i, j] - ufut[i, j]
+    
   for i in prange(4, nzz - 4):
     for j in range(4, nxx - 4):
-
-      upas[i, j] = arg[i, j] * laplacian[i, j] + 2.0 * upre[i, j] - ufut[i, j]
-      
       damp = damp_x[j] * damp_z[i]
 
       ufut[i, j] = upre[i, j] * damp
@@ -402,7 +401,6 @@ def _backward_kernel(
   depas: np.ndarray,
   depre: np.ndarray,
   defut: np.ndarray,
-  laplacian: np.ndarray,
   damp_x: np.ndarray,
   damp_z: np.ndarray,
   inv_dh2: float,
@@ -436,11 +434,12 @@ def _backward_kernel(
         1008.0 * depre[i, j+2] + 128.0   * depre[i, j+3] - 9.0    * depre[i, j+4]
       )
 
-      laplacian[i, j] = (d2u_dx2 + d2u_dz2) * inv_dh2
+      laplacian = (d2u_dx2 + d2u_dz2) * inv_dh2
+
+      depas[i, j] = arg[i, j] * laplacian + 2.0 * depre[i, j] - defut[i, j]
 
   for i in prange(4, nzz - 4):
     for j in range(4, nxx - 4):
-      depas[i, j] = arg[i, j] * laplacian[i, j] + 2.0 * depre[i, j] - defut[i, j]
 
       damp = damp_x[j] * damp_z[i]
 
