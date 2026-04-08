@@ -1,11 +1,11 @@
 # ------------------------- General -------------------------
 [General]
 debug = false
-engine = "GPU" # Keys: GPU/CPU
+engine = "CPU" # Keys: GPU/CPU
 
 # --------------------------- RTM ---------------------------
 [RTM]
-save = true
+save = false
 
 laplacian = true
 
@@ -14,7 +14,7 @@ laplacian = true
 dh = 10.0
 
 [Modeling.Cerjan]
-nb = 100
+nb = 250
 factor = 0.0015
 
 # ----------------------- Seismogram ------------------------
@@ -41,14 +41,14 @@ nz = 351
 path = "data/input/models/vp_351x1701_10m.bin"
 
 [Model.create]
-nx = 200
-nz = 100
+nx = 900
+nz = 300
 interfaces = [ 50 ]
 layerValues = [ 1500, 2000 ]
 
 # ------------------------- Geometry ------------------------
 [Geometry]
-mode = "load" # Keys: create/load
+mode = "create" # Keys: create/load
 
 [Geometry.load]
 save = false
@@ -57,10 +57,10 @@ receivers = "data/input/geometry/receivers.txt"
 sources = "data/input/geometry/sources22.txt"
 
 [Geometry.create]
-offset = 5
+offset = 10
 receiversDepth = 0
 
-sources = [1700]
+sources = [4550]
 sourcesDepth = 8
 
 # ------------------------- Wavelet -------------------------

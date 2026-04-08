@@ -181,6 +181,7 @@ class Propagation:
           d = j - (self.c.nb + self.c.nx - 1)
           self.damp_x[j] = cp.exp(-(self.c.factor * d) * (self.c.factor * d))
 
+
 @dataclass(slots=True)
 class Wavefield:
   shape: Tuple[int, int]
@@ -223,6 +224,7 @@ void forward_kernel(
     int i = blockIdx.y * blockDim.y + threadIdx.y; 
     int j = blockIdx.x * blockDim.x + threadIdx.x;
 
+    // verificar se estou utilizando uma thread
     if (i == iz && j == ix)
     {
       upre[iz * nxx + ix] += ricker[t] / dh2;
@@ -234,7 +236,7 @@ void forward_kernel(
           -9.0   * upre[(i-4) * nxx + j] +
           128.0  * upre[(i-3) * nxx + j] -
           1008.0 * upre[(i-2) * nxx + j] +
-          8064.0 * upre[(i-1) * nxx + j] -
+          8064.0 * upre[i-1) * nxx + j] -
           14350.0* upre[i * nxx + j] +
           8064.0 * upre[(i+1) * nxx + j] -
           1008.0 * upre[(i+2) * nxx + j] +
@@ -272,6 +274,8 @@ void forward_kernel(
     }
 }
 ''', 'forward_kernel')
+
+# deixar loop só com a fonte para ver se funciona (deve haver um ponto com um valor na posição da fonte)
 
 _get_seismogram = cp.RawKernel(r'''
 extern "C" __global__

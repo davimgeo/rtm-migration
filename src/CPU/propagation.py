@@ -46,7 +46,8 @@ class Propagation:
     self.kernel_arg_homo = KernelArguments.make(
         config.dh, config.dt, model_homo
     )
-
+    plt.imshow(model.model)
+    plt.show()
     self.damp_x = np.zeros(model.nxx)
     self.damp_z = np.zeros(model.nzz)
 
@@ -61,28 +62,27 @@ class Propagation:
   def fdm_propagation(self, ix: int, iz: int, isSnap=False) -> None:
       self.ix, self.iz = ix, iz
 
+      self.s.seismogram.fill(0.0)
+      self.u.past.fill(0.0)
+      self.u.present.fill(0.0)
+      self.u.future.fill(0.0)
+
       for t in range(1, self.c.nt - 1):
 
-        _forward_kernel(
-          self.u.past, self.u.present, self.u.future, self.laplacian,
-          self.damp_x, self.damp_z, self.kernel_arg.inv_dh2,
-          self.m.nzz, self.m.nxx, self.w.wavelet,
-          self.ix, self.iz, self.kernel_arg.dh2, 
-          self.kernel_arg.velocity_term, t
+        self.forward_propagation(
+          self.u,
+          self.kernel_arg,
+          t
         )
 
         self.__get_seismogram(self.s.seismogram, self.u.present, t)
 
         self.get_snapshots(t, isSnap)
 
-      self.u.past.fill(0.0)
-      self.u.present.fill(0.0)
-      self.u.future.fill(0.0)
-
   def get_snapshots(self, t: int, isSnap: bool):
     if isSnap and not t % self.snap_ratio:
       self.snapshots[self.snap_id_src] = self.u.present.copy()
-      self.snap_id_src += 1   
+      self.snap_id_src += 1
 
   def remove_direct_wave_offset(self, ix: int, iz: int) -> None:
       self.ix, self.iz = ix, iz
@@ -207,7 +207,7 @@ class Propagation:
       scale = 2.0 * np.std(snap)
 
       model_frame = ax.imshow(
-        self.mdl.model[self.c.nb:self.c.nb+self.c.nz,
+        self.m.model[self.c.nb:self.c.nb+self.c.nz,
                              self.c.nb:self.c.nb+self.c.nx],
         aspect="auto", cmap="jet", alpha=0.5
       )

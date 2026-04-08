@@ -270,7 +270,7 @@ class Parameters:
   nz: int = 300
   nx: int = 900
 
-  value: int = 2500.0
+  value: int = 2500
 
   center: tuple = (nz // 2, nx // 2)
 

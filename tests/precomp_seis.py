@@ -39,8 +39,8 @@ for isrc in range(len(geom.srcxId)):
   ix = int(geom.srcxId[isrc]) + config.nb
   iz = int(geom.srczId[isrc]) + config.nb
 
-  modeling.remove_direct_wave_model(ix, iz)
+  modeling.fdm_propagation(ix, iz, isSnap=True)
 
-  #modeling.plot_snapshots()
+  modeling.plot_snapshots()
 
   seis.plot()

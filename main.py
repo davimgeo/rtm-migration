@@ -14,6 +14,7 @@ def main():
   model.get()
   model.set_boundary()
   model.gaussian_smooth(sigma=3)
+  model.plot()
 
   wavelet = Wavelet(config)
   wavelet.get()
@@ -33,6 +34,7 @@ if __name__ == "__main__":
   migration, model = main()
 
   model.plot(model.model_smooth)
+  #migration.plot_snapshots(migration.snaps.src)
   migration.plot()
 
 
