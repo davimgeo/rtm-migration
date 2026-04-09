@@ -222,36 +222,6 @@ class SmoothCircle:
         alpha=0.8
       )
 
-      # ax.scatter(
-      #   self.cfg.ref_sigma, self.cfg.ref_amp, 0.0,
-      #   color='b',
-      #   s=50,
-      #   label='Reference'
-      # )
-
-      #mask = np.isclose(l2_norm, np.min(l2_norm), atol=1e-6)
-
-      i, j = np.unravel_index(np.argmin(obj_norm), obj_norm.shape)
-
-      sigma_min_real = self.X[i, j] 
-      amp_min_real = self.Y[i, j]
-
-      sigma_min = self.cfg.ref_sigma - sigma_min_real
-      amp_min = self.cfg.ref_amp - amp_min_real
-      print(sigma_min, amp_min)
-
-      print(self.cfg.ref_amp * self.cfg.ref_sigma**2)
-      print(amp_min * sigma_min**2)
-
-      # ax.scatter(
-      #   self.X[i, j],
-      #   self.Y[i, j],
-      #   l2_norm[i, j],
-      #   s=50,
-      #   color='r',
-      #   label="Minimum"
-      # )
-
       fig.colorbar(surf1, shrink=0.5, aspect=5)
 
       ax.set_box_aspect([1, 1, 1])

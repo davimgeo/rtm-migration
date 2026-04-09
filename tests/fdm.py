@@ -1,5 +1,109 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from numba import njit, prange
+from matplotlib import animation
+
+def plot_snapshots(
+    snapshots: list,    
+    model: np.ndarray,       
+    nx: int, nz: int, nb: int, dh: float, 
+    recx: np.ndarray, recz: np.ndarray, 
+    srcxId: np.ndarray, srczId: np.ndarray, 
+    nt: int, dt: float
+) -> None:
+
+    xloc = np.linspace(0, nx-1, 11, dtype=int)
+    xlab = np.array(xloc * dh, dtype=int)
+
+    zloc = np.linspace(0, nz-1, 7, dtype=int)
+    zlab = np.array(zloc * dh, dtype=int)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ims = []
+
+    for snap in snapshots:
+        scale = 2.0 * np.std(snap)
+
+        model_frame = ax.imshow(
+            model[nb:nb+nz, nb:nb+nx],
+            aspect="auto",
+            cmap="jet",
+            alpha=0.5
+        )
+
+        snap_frame = ax.imshow(
+            snap[nb:nb+nz, nb:nb+nx],
+            aspect="auto",
+            cmap="Greys",
+            vmin=-scale,
+            vmax=scale,
+            alpha=0.7
+        )
+
+        ax.plot(recx, recz, 'bv')
+        ax.plot(srcxId, srczId, 'r*')
+
+        ims.append([model_frame, snap_frame])
+
+    ani = animation.ArtistAnimation(
+        fig, ims,
+        interval=(nt / len(snapshots) + 1) * dt * 1e3,
+        blit=False,
+        repeat_delay=0
+    )
+
+    ax.set_xticks(xloc)
+    ax.set_xticklabels(xlab)
+    ax.set_yticks(zloc)
+    ax.set_yticklabels(zlab)
+
+    plt.show()
+    return ani
+
+def save_snapshots(
+  snapshots: list, upre: np.ndarray,
+  snap_ratio: int, t: int
+  ) -> None:
+
+  if not t % snap_ratio:
+    snapshots.append(upre.copy())
+
+def plot_model_and_geometry(
+    model: np.ndarray,
+    nx: int, nz: int, nb: int, dh: int,
+    recx: int, recz: int,
+    srcxId: int, srczId: int
+) -> None:
+    xloc = np.linspace(0, nx - 1, 11, dtype=int)
+    xlab = np.array(xloc * dh, dtype=int)
+
+    zloc = np.linspace(0, nz - 1, 7, dtype=int)
+    zlab = np.array(zloc * dh, dtype=int)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    img = ax.imshow(
+        model[nb:nb + nz, nb:nb + nx],
+        aspect="auto",
+        cmap="jet",
+    )
+
+    ax.plot(recx, recz, 'bv', label="Receivers")
+    ax.plot(srcxId, srczId, 'r*', markersize=12, label="Source")
+
+    ax.set_xticks(xloc)
+    ax.set_xticklabels(xlab)
+    ax.set_yticks(zloc)
+    ax.set_yticklabels(zlab)
+
+    ax.set_xlabel("Distance [m]")
+    ax.set_ylabel("Depth [m]")
+    ax.set_title("Velocity Model")
+
+    plt.colorbar(img, ax=ax, label="VP [m/s]")
+    ax.legend()
+
+    plt.show()
 
 def set_boundary(model, nzz, nxx, nb) -> np.ndarray:
 

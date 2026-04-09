@@ -31,7 +31,7 @@ nt = 2001
 dt = 1e-3
 
 [Seismogram.plot]
-perc = 95
+perc = 98
 
 # -------------------------- Model --------------------------
 [Model]
@@ -43,8 +43,8 @@ nz = 351
 path = "data/input/models/vp_351x1701_10m.bin"
 
 [Model.create]
-nx = 200
-nz = 100
+nx = 201
+nz = 101
 interfaces = [ 50 ]
 layerValues = [ 1500, 2000 ]
 
@@ -59,10 +59,10 @@ receivers = "data/input/geometry/receivers.txt"
 sources = "data/input/geometry/sources22.txt"
 
 [Geometry.create]
-offset = 10
+offset = 5
 receiversDepth = 0
 
-sources = [4550]
+sources = [1100]
 sourcesDepth = 8
 
 # ------------------------- Wavelet -------------------------
