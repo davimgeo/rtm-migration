@@ -14,7 +14,8 @@ class Parameters:
 
   # RTM 
   save_image: bool = field(default=False, metadata={"toml": "RTM.save"})
-  is_laplacian: bool = field(default=False, metadata={"toml": "RTM.laplacian"})
+  is_laplacian: bool = field(default=False, metadata={"toml": "RTM.laplacian_filter"})
+  is_gradient: bool = field(default=False, metadata={"toml": "RTM.gradient"})
 
   # Modeling
   dh: float = field(default=0.0, metadata={"toml": "Modeling.dh"})

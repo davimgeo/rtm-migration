@@ -46,8 +46,7 @@ class Propagation:
     self.kernel_arg_homo = KernelArguments.make(
         config.dh, config.dt, model_homo
     )
-    plt.imshow(model.model)
-    plt.show()
+
     self.damp_x = np.zeros(model.nxx)
     self.damp_z = np.zeros(model.nzz)
 
@@ -89,12 +88,10 @@ class Propagation:
 
       for t in range(1, self.c.nt - 1):
 
-        _forward_kernel(
-          self.u.past, self.u.present, self.u.future, self.laplacian,
-          self.damp_x, self.damp_z, self.kernel_arg.inv_dh2,
-          self.m.nzz, self.m.nxx, self.w.wavelet,
-          self.ix, self.iz, self.kernel_arg.dh2, 
-          self.kernel_arg.velocity_term, t
+        self.forward_propagation(
+          self.u,
+          self.kernel_arg,
+          t
         )
 
         self.__get_seismogram(self.s.seismogram, self.u.present, t)
@@ -104,7 +101,7 @@ class Propagation:
   def remove_direct_wave_model(self, ix: int, iz: int) -> None:
       self.ix, self.iz = ix, iz
       
-      self.zero_out_matrices()
+      self.__reset_field()
 
       for t in range(1, self.c.nt - 1):
 
@@ -126,7 +123,7 @@ class Propagation:
 
       self.s.seismogram -= self.s.seismogram_homo
 
-  def zero_out_matrices(self):
+  def __reset_field(self):
     self.s.seismogram.fill(0.0)
     self.s.seismogram_homo.fill(0.0)
 
@@ -230,7 +227,6 @@ class Propagation:
       blit=False,
       repeat_delay=0
     )
-
     ax.set_xticks(xloc)
     ax.set_xticklabels(xlab)
 

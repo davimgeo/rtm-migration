@@ -58,7 +58,11 @@ class Migration:
     )
 
     self.snaps = SnapshotManager.from_config(config, shape)
-    
+   
+    self.wavelet_migration = self.w.wavelet
+    if config.is_gradient:
+      self.wavelet_migration = self.w.wavelet_derivative
+
     self.ix, self.iz = 0, 0
     self.current_step = 1
 
@@ -66,12 +70,11 @@ class Migration:
 
     for isrc in range(len(self.g.srcxId)):
 
-      self.__zero_out_matrices()
+      self.__reset_fields()
 
       self.__define_source_coordinates(isrc)
 
       self.md.remove_direct_wave_model(self.ix, self.iz)
-      self.s.plot()
 
       for t in range(1, self.c.nt - 1):
 
@@ -95,7 +98,7 @@ class Migration:
     if self.c.save_image:
       self.__save()
 
-  def __zero_out_matrices(self):
+  def __reset_fields(self):
     self.s.seismogram.fill(0.0)
 
     self.u.past.fill(0.0)
@@ -121,7 +124,7 @@ class Migration:
       self.u.past, self.u.present, self.u.future, self.md.damp_x,
       self.md.damp_z, self.kernel_args.inv_dh2,
       self.m.nzz, self.m.nxx, 
-      self.w.wavelet, self.ix,
+      self.wavelet_migration, self.ix,
       self.iz, self.kernel_args.dh2,
       self.kernel_args.velocity_term, t,
     )
