@@ -12,7 +12,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numba import njit, prange
 
-from src import Config, Geometry, Wavelet
+from src import Config, Geometry, Wavelet, Seismogram
+from fdm import fdm_propagation, get_damp, set_boundary
 
 import numpy as np
 
@@ -183,7 +184,7 @@ ufut = np.zeros(shape)
 seismogram = np.zeros((config.nt, geom.nrec))
 # ====== get d_obs ======
 
-base_model_ext = set_boundary(baseModel, nzz, nxx, config.nb)
+base_model_ext = set_boundary(base_model, nzz, nxx, config.nb)
 
 dh2 = config.dh**2
 inv_dh2 = 1.0 / (5040.0 * dh2)
@@ -200,7 +201,6 @@ for t in range(1, config.nt - 1):
     config.nb, t
   )
 
-from src import Seismogram
 seis = Seismogram(config, geom)
 seis.plot(d_calc)
 
@@ -209,8 +209,8 @@ d_obs = np.ndarray
 
 seismogram_loop = np.zeros((config.nt, geom.nrec))
 
-l2 = np.zeros(len(sigma))
-for i, circle in enumerate(cubeOfVaryingModels):
+l2 = np.zeros(len(alphas))
+for i, circle in enumerate(model_cube):
   seismogram_loop.fill(0.0)
   upas.fill(0.0)
   upre.fill(0.0)
@@ -236,6 +236,7 @@ for i, circle in enumerate(cubeOfVaryingModels):
 
       plt.imshow(circle_ext)
       plt.show()
+
   seis.plot(d_obs)
 
   l2[i] = np.sqrt(np.sum((d_obs - d_calc)**2))
