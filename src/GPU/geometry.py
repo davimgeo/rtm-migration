@@ -53,7 +53,7 @@ class Geometry:
     self.save() 
 
   def createReceivers(self):
-    self.nrec = int(self.c.nx / self.c.offset)
+    self.nrec = int(self.c.nx_geom / self.c.offset)
 
     self.recx = np.arange(0, self.nrec) * self.c.offset
     self.recz = cp.full(self.nrec, self.c.rec_depth)

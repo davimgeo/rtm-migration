@@ -39,7 +39,7 @@ def get_models_cube(alphas, v0, nz, nx):
   return models_cube
 
 # ====== get circles/basemodel ======
-nz, nx = 101, 201
+nz, nx = 301, 901
 v0 = 2500
 
 ref_alpha = 0.3
@@ -47,11 +47,10 @@ ref_alpha = 0.3
 size = 51
 
 alpha_min = 0.1
-alpha_max = 0.9
+alpha_max = 5
 
 alphas = np.linspace(alpha_min, alpha_max, size)
 idx = np.abs(alphas - ref_alpha).argmin()
-# include ref_alpha in the problem
 alphas[idx] = ref_alpha
 
 base_model = get_model(nz, nx, v0, ref_alpha)

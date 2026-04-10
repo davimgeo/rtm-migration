@@ -59,6 +59,9 @@ receivers = "data/input/geometry/receivers.txt"
 sources = "data/input/geometry/sources22.txt"
 
 [Geometry.create]
+nx = 201
+nz = 101
+
 offset = 5
 receiversDepth = 0
 

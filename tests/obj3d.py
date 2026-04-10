@@ -36,7 +36,7 @@ ref_alpha = 0.3
 size = 21
 
 alpha_min = 0.1
-alpha_max = 0.9
+alpha_max = 5
 
 alphas = np.linspace(alpha_min, alpha_max, size)
 idx = np.abs(alphas - ref_alpha).argmin()

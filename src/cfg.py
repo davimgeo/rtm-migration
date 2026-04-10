@@ -41,13 +41,15 @@ class Parameters:
 
   # Geometry
   geometry_mode: str = field(default="load", metadata={"toml": "Geometry.mode"})
+  nx_geom: int = field(default=0, metadata={"toml": "Geometry.create.nx"})
+  nz_geom: int = field(default=0, metadata={"toml": "Geometry.create.nz"})
+  rec_depth: float = field(default=0.0, metadata={"toml": "Geometry.create.receiversDepth"})
+  sources_create: List[int] = field(default_factory=list, metadata={"toml": "Geometry.create.sources"})
+  src_depth: float = field(default=0.0, metadata={"toml": "Geometry.create.sourcesDepth"})
+  offset: float = field(default=0.0, metadata={"toml": "Geometry.create.offset"})
   receivers: str = field(default="", metadata={"toml": "Geometry.load.receivers"})
   sources: str = field(default="", metadata={"toml": "Geometry.load.sources"})
-  offset: float = field(default=0.0, metadata={"toml": "Geometry.create.offset"})
   save_create: bool = field(default=False, metadata={"toml": "Geometry.load.save"})
-  rec_depth: float = field(default=0.0, metadata={"toml": "Geometry.create.receiversDepth"})
-  src_depth: float = field(default=0.0, metadata={"toml": "Geometry.create.sourcesDepth"})
-  sources_create: List[int] = field(default_factory=list, metadata={"toml": "Geometry.create.sources"})
 
   # Wavelet
   fmax: float = field(default=0.0, metadata={"toml": "Wavelet.fmax"})
