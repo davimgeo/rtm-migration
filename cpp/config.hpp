@@ -47,6 +47,7 @@ public:
   float offset = 0.0f;
   int* src_create;
   bool save_create = false;
+  int nsrc = 0;
 
   // ===== Wavelet =====
   float fmax = 0.0f;

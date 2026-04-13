@@ -33,6 +33,12 @@ Geometry::Receivers Geometry::createReceivers()
 
 Geometry::Sources Geometry::createSources()
 {
+  src.x = new float[nsrc];
+  src.z = new float[nsrc];
+
+  for (int i = 0; i < nsrc; i++) {
+    src.x 
+  }
 };
 
 void Geometry::save()
