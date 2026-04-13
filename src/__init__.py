@@ -2,12 +2,12 @@ from .cfg import Config
 
 _engine = Config().load().engine
 
-if _engine == "GPU":
-  from . import GPU as _backend
-elif _engine == "CPU":
-  from . import CPU as _backend
-else:
-  raise ValueError(f"Unknown engine: {_engine}")
+match _engine:
+  case "GPU":
+    from . import GPU as _backend
+  case _:
+    if _engine != "CPU": print(f"Unknown engine {_engine} switching to CPU")
+    from . import CPU as _backend
 
 Config = Config
 Migration = _backend.Migration 

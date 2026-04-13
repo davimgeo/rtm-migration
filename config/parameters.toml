@@ -50,7 +50,7 @@ layerValues = [ 1500, 2000 ]
 
 # ------------------------- Geometry ------------------------
 [Geometry]
-mode = "create" # Keys: create/load
+mode = "load" # Keys: create/load
 
 [Geometry.load]
 save = false
