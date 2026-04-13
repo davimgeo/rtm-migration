@@ -1,9 +1,7 @@
 #ifndef GEOMETRY_HPP
 #define GEOMETRY_HPP
 
-class Config
-{
-};
+#include "config.hpp"
 
 class Geometry
 {
