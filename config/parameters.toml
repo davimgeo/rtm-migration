@@ -5,11 +5,11 @@ engine = "CPU" # Keys: GPU/CPU
 
 # --------------------------- RTM ---------------------------
 [RTM]
-save = true
+save = false
 
 laplacian_filter = true
 
-gradient = false
+gradient = true
 
 # ------------------------ Modeling -------------------------
 [Modeling]
@@ -35,7 +35,7 @@ perc = 98
 
 # -------------------------- Model --------------------------
 [Model]
-mode = "load" # Keys: create/load
+mode = "create" # Keys: create/load
 
 [Model.load]
 nx = 1701
@@ -53,16 +53,17 @@ layerValues = [ 1500, 2000 ]
 mode = "load" # Keys: create/load
 
 [Geometry.load]
-save = false
 
-receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources40_marmousi.txt"
+receivers = "data/input/geometry/receivers_2layer.txt"
+sources = "data/input/geometry/sources22.txt"
 
 [Geometry.create]
-nx = 1701
-nz = 351
+save = false
 
-offset = 15
+nx = 201
+nz = 101
+
+offset = 5
 receiversDepth = 0
 
 sources = [1100]

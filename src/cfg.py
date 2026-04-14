@@ -49,7 +49,7 @@ class Parameters:
   offset: float = field(default=0.0, metadata={"toml": "Geometry.create.offset"})
   receivers: str = field(default="", metadata={"toml": "Geometry.load.receivers"})
   sources: str = field(default="", metadata={"toml": "Geometry.load.sources"})
-  save_create: bool = field(default=False, metadata={"toml": "Geometry.load.save"})
+  save_create: bool = field(default=False, metadata={"toml": "Geometry.create.save"})
 
   # Wavelet
   fmax: float = field(default=0.0, metadata={"toml": "Wavelet.fmax"})

@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from .cfg import Config
 
 _engine = Config().load().engine
@@ -8,6 +10,12 @@ match _engine:
   case _:
     if _engine != "CPU": print(f"Unknown engine {_engine} switching to CPU")
     from . import CPU as _backend
+
+# just to calm down the lsp
+if TYPE_CHECKING:
+    from . import CPU as _cpu_backend
+
+    _backend = _cpu_backend
 
 Config = Config
 Migration = _backend.Migration 

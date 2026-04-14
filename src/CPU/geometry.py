@@ -66,6 +66,7 @@ class Geometry:
     self.srczId = np.full(self.nsrc, self.c.src_depth)
 
   def save(self):
+    print(self.c.save_create)
     if self.c.save_create:
 
       recId = np.arange(1, self.nrec + 1)

@@ -46,7 +46,7 @@ class Plotting:
     vmin2 = np.percentile(model2, 100 - perc)
     vmax2 = np.percentile(model2, perc)
 
-    _, axs = plt.subplots(nrows=1, ncols=2, figsize=(15, 5))
+    _, axs = plt.subplots(nrows=1, ncols=2, figsize=(17, 6))
 
     im0 = axs[0].imshow(
       model1, aspect='auto', cmap="Greys", 
@@ -61,6 +61,60 @@ class Plotting:
     )
     axs[1].set_title(title2)
     plt.colorbar(im1, ax=axs[1])
+
+    plt.tight_layout()
+    plt.show()
+
+  def compare_model_and_traces(
+    self, 
+    model1: np.ndarray, 
+    model2: np.ndarray, 
+    trace_number: int,
+    title1=None,
+    title2=None,
+    ) -> None:
+
+    if title1 is None:
+      title1 = "Image 1"
+
+    if title2 is None:
+      title2 = "Image 2"
+
+    nz, nx = model1.shape
+
+    perc = 99
+
+    vmin1 = np.percentile(model1, 100 - perc)
+    vmax1 = np.percentile(model1, perc)
+
+    vmin2 = np.percentile(model2, 100 - perc)
+    vmax2 = np.percentile(model2, perc)
+
+    _, axs = plt.subplots(nrows=1, ncols=3, figsize=(15, 5))
+
+    im0 = axs[0].imshow(
+      model1, aspect='auto', cmap="Greys", 
+      vmin=vmin1, vmax=vmax1
+    )
+    axs[0].set_title(title1)
+    plt.colorbar(im0, ax=axs[0])
+
+    axs[0].plot(np.full(nz, trace_number), np.arange(nz), 'b--')
+
+    im1 = axs[1].imshow(
+      model2, aspect='auto', cmap="Greys", 
+      vmin=vmin2, vmax=vmax2
+    )
+    axs[1].set_title(title2)
+    plt.colorbar(im1, ax=axs[1])
+
+    axs[1].plot(np.full(nz, trace_number), np.arange(nz), 'r--')
+
+    axs[2].plot(model1[:, trace_number], np.arange(nz), label=f"{title1} Trace")
+    axs[2].plot(-model2[:, trace_number], np.arange(nz), label=f"{title2} Trace")
+
+    axs[2].invert_yaxis() 
+    axs[2].legend()
 
     plt.tight_layout()
     plt.show()
