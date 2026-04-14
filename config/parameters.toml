@@ -5,11 +5,11 @@ engine = "CPU" # Keys: GPU/CPU
 
 # --------------------------- RTM ---------------------------
 [RTM]
-save = false
+save = true
 
 laplacian_filter = true
 
-gradient = true
+gradient = false
 
 # ------------------------ Modeling -------------------------
 [Modeling]
@@ -27,7 +27,7 @@ mode = "generate" # Keys: generate/load
 path = ""
 
 [Seismogram.parameters]
-nt = 2001
+nt = 5001
 dt = 1e-3
 
 [Seismogram.plot]
@@ -35,7 +35,7 @@ perc = 98
 
 # -------------------------- Model --------------------------
 [Model]
-mode = "create" # Keys: create/load
+mode = "load" # Keys: create/load
 
 [Model.load]
 nx = 1701
@@ -56,13 +56,13 @@ mode = "load" # Keys: create/load
 save = false
 
 receivers = "data/input/geometry/receivers.txt"
-sources = "data/input/geometry/sources22.txt"
+sources = "data/input/geometry/sources40_marmousi.txt"
 
 [Geometry.create]
-nx = 201
-nz = 101
+nx = 1701
+nz = 351
 
-offset = 5
+offset = 15
 receiversDepth = 0
 
 sources = [1100]

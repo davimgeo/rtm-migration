@@ -15,6 +15,8 @@ class Geometry:
 
     self.nrec, self.nsrc = 0, 0
 
+    self.direct_wave = np.array([])
+
   def get(self):
     mode = self.c.geometry_mode.upper()
     if mode == "LOAD":

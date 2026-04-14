@@ -47,7 +47,7 @@ class Seismogram:
     except OSError as e:
       raise OSError(f"Could not save file: {path}") from e
 
-  def remove_direct_wave(self, ix, iz, epsilon=0.09):
+  def remove_direct_wave_range(self, ix, iz, epsilon=0.09):
       nt = self.seismogram.shape[0]
 
       rx = self.geom.recx + self.c.nb
@@ -74,6 +74,28 @@ class Seismogram:
         imax = min(nt, max(t0_idx, t1_idx))
 
         mask = (samples >= imin) & (samples <= imax)
+
+        self.seismogram[mask, j] = 0.0
+
+  def remove_direct_wave(self, ix, iz, epsilon=0.05):
+      nt = self.seismogram.shape[0]
+
+      rx = self.geom.recx + self.c.nb
+      rz = self.geom.recz + self.c.nb
+
+      off = np.sqrt(
+        (ix - rx)**2 + (iz - rz)**2
+      ) * self.c.dh
+      self.geom.direct_wave = (off / 1500.0) + self.c.tlag
+      
+      samples = np.arange(nt)
+
+      for j in range(self.geom.nrec):
+
+        t0 = self.geom.direct_wave[j] + epsilon
+        t0_idx = int(t0 / self.c.dt)
+
+        mask = (samples <= t0_idx)
 
         self.seismogram[mask, j] = 0.0
 
