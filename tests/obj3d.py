@@ -23,7 +23,7 @@ def get_model(nz, nx, v0, alpha):
 
   i, j = np.ogrid[:nz, :nx]
 
-  model[i, j] = v0 + i / alpha
+  model[i, j] = v0 + alpha*i
 
   return model
 
@@ -31,11 +31,11 @@ def get_model(nz, nx, v0, alpha):
 nz, nx = 101, 201
 v0 = 2500
 
-ref_alpha = 0.3
+ref_alpha = 3
 
-size = 21
+size = 31
 
-alpha_min = 0.1
+alpha_min = -5
 alpha_max = 5
 
 alphas = np.linspace(alpha_min, alpha_max, size)
@@ -51,11 +51,15 @@ initial_velocities[idx] = v0
 
 base_model = get_model(nz, nx, v0, ref_alpha)
 
+
 # ====== global parameters ======
 
 config = Config().load()
 geom = Geometry(config); geom.get()
 wavelet = Wavelet(config); wavelet.get()
+#model = Model(config, geom)
+#from src import Model
+#model.plot(base_model)
 
 nzz = nz + 2 * config.nb
 nxx = nx + 2 * config.nb

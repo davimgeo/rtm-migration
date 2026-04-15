@@ -104,10 +104,7 @@ class Model:
       fig, ax = plt.subplots(figsize=(12, 5))
 
       img = ax.imshow(
-          model[
-            self.c.nb:self.c.nb + self.c.nz,
-            self.c.nb:self.c.nb + self.c.nx
-          ],
+          model,
           aspect="auto",
           cmap="jet",
       )

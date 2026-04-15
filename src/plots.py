@@ -46,7 +46,7 @@ class Plotting:
     vmin2 = np.percentile(model2, 100 - perc)
     vmax2 = np.percentile(model2, perc)
 
-    _, axs = plt.subplots(nrows=1, ncols=2, figsize=(17, 6))
+    _, axs = plt.subplots(nrows=2, ncols=1, figsize=(15, 6))
 
     im0 = axs[0].imshow(
       model1, aspect='auto', cmap="Greys", 
@@ -111,7 +111,7 @@ class Plotting:
     axs[1].plot(np.full(nz, trace_number), np.arange(nz), 'r--')
 
     axs[2].plot(model1[:, trace_number], np.arange(nz), label=f"{title1} Trace")
-    axs[2].plot(-model2[:, trace_number], np.arange(nz), label=f"{title2} Trace")
+    axs[2].plot(-model2[:, trace_number], np.arange(nz), 'r', label=f"{title2} Trace")
 
     axs[2].invert_yaxis() 
     axs[2].legend()

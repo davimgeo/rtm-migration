@@ -19,6 +19,7 @@ def main():
   wavelet = Wavelet(config)
   wavelet.get()
   wavelet.second_derivative()
+  wavelet.plot(wavelet.wavelet_derivative)
 
   seis = Seismogram(config, geom)
 

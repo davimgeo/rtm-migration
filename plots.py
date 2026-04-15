@@ -6,19 +6,25 @@ pltm = Plotting()
 
 height, weight = 351, 1701
 
-model1 = pltm.load(
+model_no_gradient = pltm.load(
     PATH + "marmousi_no_gradient_594snaps_1701x351.bin", height, weight
 )
-model2 = pltm.load(
+model_gradient = pltm.load(
     PATH + "marmousi_gradient_594snaps_1701x351.bin", height, weight
 )
 
-title1 = "No Gradient"
+import numpy as np
+mask1 = np.zeros_like(model_no_gradient, dtype=bool)
+mask1[:55, :] = True
+
+model_no_gradient[mask1] = 0.0
+model_gradient[mask1] = 0.0
+
 title2 = "Gradient"
+pltm.plot(model_gradient)
 
-trace_number = 50:801
+trace_number = 550
 
-pltm.compare_model_and_traces(
-    model1, model2, trace_number,
-    title1, title2
-)
+#pltm.compare_model_and_traces(
+#    model_no_gradient, model_gradient, trace_number,
+#)
