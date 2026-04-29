@@ -91,9 +91,15 @@ class Model:
       
       return arr
 
-  def plot(self, model=None):
+  def plot(self, model=None, extent=False):
       if model is None:
         model = self.model
+      
+      if extent:
+        model = model[
+          self.c.nb:self.c.nb + self.c.nz,
+          self.c.nb:self.c.nb + self.c.nx
+        ]
 
       xloc = np.linspace(0, self.c.nx - 1, 11, dtype=int)
       xlab = np.array(xloc * self.c.dh, dtype=int)

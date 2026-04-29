@@ -74,8 +74,8 @@ class Migration:
 
       self.__define_source_coordinates(isrc)
 
-      #self.md.remove_direct_wave_model(self.ix, self.iz)
-      self.md.remove_direct_wave_offset(self.ix, self.iz)
+      self.md.remove_direct_wave_model(self.ix, self.iz)
+      #self.md.remove_direct_wave_offset(self.ix, self.iz)
 
       for t in range(1, self.c.nt - 1):
 

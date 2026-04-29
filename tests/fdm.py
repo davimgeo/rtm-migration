@@ -40,8 +40,8 @@ def plot_snapshots(
             alpha=0.7
         )
 
-        ax.plot(recx, recz, 'bv')
-        ax.plot(srcxId, srczId, 'r*')
+        #ax.plot(recx, recz, 'bv')
+        #ax.plot(srcxId, srczId, 'r*')
 
         ims.append([model_frame, snap_frame])
 

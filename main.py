@@ -14,12 +14,12 @@ def main():
   model.get()
   model.set_boundary()
   model.gaussian_smooth(sigma=3)
-  model.plot()
+  model.plot(model.model_smooth, extent=True)
 
   wavelet = Wavelet(config)
   wavelet.get()
   wavelet.second_derivative()
-  wavelet.plot(wavelet.wavelet_derivative)
+  #wavelet.plot(wavelet.wavelet_derivative)
 
   seis = Seismogram(config, geom)
 
@@ -34,7 +34,7 @@ def main():
 if __name__ == "__main__":
   migration, model = main()
 
-  model.plot(model.model_smooth)
+  model.plot(model.model_smooth, extent=True)
   #migration.plot_snapshots(migration.snaps.src)
   migration.plot()
 
