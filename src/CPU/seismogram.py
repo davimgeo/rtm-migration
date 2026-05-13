@@ -102,11 +102,6 @@ class Seismogram:
   def frequency_domain(self):
     seismogram_frequency = np.fft.fft2(self.seismogram)
 
-    w = np.fft.fftfreq(seismogram_frequency.shape[-1])
-
-    plt.imshow(np.abs(seismogram_frequency), aspect="auto")
-    plt.show()
-
   def apply_agc(self, time_window : float):
       sliding_window = int(time_window / self.c.dt) + 1
 

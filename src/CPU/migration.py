@@ -93,6 +93,8 @@ class Migration:
 
       self.__show_modeling_status()
 
+    self.image /= self.den
+
     if self.c.is_laplacian:
       self.__laplacian_filter()
 
@@ -154,7 +156,7 @@ class Migration:
       rec = self.d.present
 
       self.num += src * rec
-      #self.den += src * src
+      self.den += src * src
 
   def __image_condition(self):
     self.image += self.snaps.dt * self.num

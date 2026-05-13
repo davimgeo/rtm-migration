@@ -5,7 +5,7 @@ engine = "CPU" # Keys: GPU/CPU
 
 # --------------------------- RTM ---------------------------
 [RTM]
-save = false
+save = true
 
 laplacian_filter = true
 

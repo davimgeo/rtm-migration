@@ -123,8 +123,6 @@ class Propagation:
 
       self.s.seismogram -= self.s.seismogram_homo
 
-      self.s.frequency_domain()
-
   def __reset_field(self):
     self.s.seismogram.fill(0.0)
     self.s.seismogram_homo.fill(0.0)
