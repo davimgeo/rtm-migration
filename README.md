@@ -13,17 +13,24 @@ $ python3 main.py
 ```
 
 ## Example
-  
-  ###Base model
+
+<div align="center">
+
+### Base model
+
+</div>
 
 <p align="center">
   <img width="800" src="https://i.imgur.com/TPnzJ87.png">
 </p>
 
-  ###Gradient of the image
+<div align="center">
+
+### Gradient of the image
+
+</div>
 
 <p align="center">
   <img width="800" src="https://i.imgur.com/2US5iFU.png">
 </p>
-
 
