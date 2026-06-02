@@ -14,16 +14,16 @@ $ python3 main.py
 
 ## Example
   
-  Base model
+  ###Base model
 
 <p align="center">
-  <img width="600" src="https://i.imgur.com/TPnzJ87.png">
+  <img width="800" src="https://i.imgur.com/TPnzJ87.png">
 </p>
 
-  Gradient of the image
+  ###Gradient of the image
 
 <p align="center">
-  <img width="600" src="https://i.imgur.com/2US5iFU.png">
+  <img width="800" src="https://i.imgur.com/2US5iFU.png">
 </p>
 
 
