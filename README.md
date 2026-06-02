@@ -1,25 +1,29 @@
 ## About
 
-Small project for realizing Reverse Time Migration of an user-defined velocity model.
+  Small project for realizing Reverse Time Migration of an user-defined velocity model.
 
 ## Usage
 
-Change parameters in the config/parameters.toml
-
-![parameters](https://i.imgur.com/V8fVurD.png)
-
-Then run the program
+  Change parameters in the config/parameters.toml
+  
+  Then run the program
 
 ```
-python3 main.py
+$ python3 main.py
 ```
 
 ## Example
+  
+  Base model
 
-Gradient of the image
+<p align="center">
+  <img width="600" src="https://i.imgur.com/TPnzJ87.png">
+</p>
 
-![image_gradient](https://i.imgur.com/2US5iFU.png)
+  Gradient of the image
 
-Base model
+<p align="center">
+  <img width="600" src="https://i.imgur.com/2US5iFU.png">
+</p>
 
-![marmousi](https://i.imgur.com/TPnzJ87.png)
+
